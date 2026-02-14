@@ -1,0 +1,69 @@
+{
+  "name": "@liyalabs/liya-3d-avatar-widget-vuejs",
+  "version": "0.0.1",
+  "description": "3D Talking Avatar Widget for Vue.js - AI Assistant with real-time lip-sync",
+  "type": "module",
+  "main": "./dist/liya-3d-avatar-widget-vuejs.umd.cjs",
+  "module": "./dist/liya-3d-avatar-widget-vuejs.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/liya-3d-avatar-widget-vuejs.js",
+      "require": "./dist/liya-3d-avatar-widget-vuejs.umd.cjs"
+    },
+    "./style.css": "./dist/liya-3d-avatar-widget-vuejs.css",
+    "./dist/liya-3d-avatar-widget-vuejs.css": "./dist/liya-3d-avatar-widget-vuejs.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "peerDependencies": {
+    "vue": "^3.3.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "three": "^0.160.0",
+    "@types/three": "^0.160.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "~5.7.0",
+    "vite": "^6.2.0",
+    "vite-plugin-dts": "^4.5.0",
+    "vue": "^3.5.0",
+    "vue-tsc": "^2.2.0"
+  },
+  "keywords": [
+    "vue",
+    "vue3",
+    "3d",
+    "avatar",
+    "talking-avatar",
+    "lip-sync",
+    "threejs",
+    "chat",
+    "chatbot",
+    "ai",
+    "assistant",
+    "widget",
+    "liya"
+  ],
+  "author": "Liya Labs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/liyalabs/liya-ai-chat"
+  },
+  "bugs": {
+    "url": "https://github.com/liyalabs/liya-ai-chat/issues"
+  },
+  "homepage": "https://liyalabs.com"
+}
