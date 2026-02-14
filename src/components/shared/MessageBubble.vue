@@ -24,7 +24,8 @@ const isUser = props.message.role === 'user'
 const excludedPreviewFields = ['metadata', 'source', 'sources', 'raw_response', 'id', 'created_at', 'updated_at', 'session_id', 'message_id']
 
 // Check if content is JSON
-function isJsonContent(content: string): boolean {
+function isJsonContent(content: string | null | undefined): boolean {
+  if (!content || typeof content !== 'string') return false
   const trimmed = content.trim()
   if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
       (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
@@ -39,7 +40,8 @@ function isJsonContent(content: string): boolean {
 }
 
 // Parse JSON content
-function parseJsonContent(content: string): any {
+function parseJsonContent(content: string | null | undefined): any {
+  if (!content || typeof content !== 'string') return null
   try {
     return JSON.parse(content.trim())
   } catch {
@@ -121,12 +123,17 @@ const parsedResponse = computed<ParsedResponse | null>(() => {
 // Check if message has JSON content for preview
 const hasJsonContent = computed(() => {
   if (isUser) return false
+  // If message has parsedResponse format, don't show JSON preview
+  if (parsedResponse.value) return false
+  // Null check before calling isJsonContent
+  if (!props.message.content || typeof props.message.content !== 'string') return false
   return isJsonContent(props.message.content)
 })
 
 // Get parsed JSON data
 const jsonData = computed(() => {
   if (!hasJsonContent.value) return null
+  if (!props.message.content || typeof props.message.content !== 'string') return null
   return parseJsonContent(props.message.content)
 })
 
@@ -138,9 +145,10 @@ const displayContent = computed(() => {
   return props.message.content
 })
 
-// Get suggestions from parsed response
+// Get suggestions from parsed response - convert to strings
 const suggestions = computed(() => {
-  return parsedResponse.value?.suggestions || []
+  const rawSuggestions = parsedResponse.value?.suggestions || []
+  return rawSuggestions.map((s: any) => typeof s === 'object' ? JSON.stringify(s) : String(s))
 })
 
 function handleSuggestionClick(suggestion: string): void {

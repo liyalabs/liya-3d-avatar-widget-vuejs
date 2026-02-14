@@ -156,7 +156,7 @@ async function fetchAvatarModel(): Promise<void> {
   
   try {
     const result = await getAvatarModel(config.assistantId)
-    backendAvatarModelUrl.value = result.model_url
+    backendAvatarModelUrl.value = ensureHttps(result.model_url)
     accessError.value = null
   } catch (error: any) {
     // Check if it's an AvatarApiError with code
