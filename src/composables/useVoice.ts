@@ -68,9 +68,10 @@ export function useVoice(locale = 'tr-TR') {
       ? window.SpeechRecognition || window.webkitSpeechRecognition 
       : null
 
-  // iOS Safari does NOT support SpeechRecognition API
+  // iOS Safari and Opera do NOT reliably support SpeechRecognition API
   isIOS.value = detectIOS()
-  isSupported.value = !!SpeechRecognitionAPI && !isIOS.value
+  const isOpera = detectOpera()
+  isSupported.value = !!SpeechRecognitionAPI && !isIOS.value && !isOpera
 
   // Check current microphone permission status
   async function checkMicPermission(): Promise<'prompt' | 'granted' | 'denied'> {
