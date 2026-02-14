@@ -85,6 +85,22 @@ let audioContext: AudioContext | null = null
 let audioSource: AudioBufferSourceNode | null = null
 let startTime = 0
 
+// iOS AudioContext helper - must be called after user interaction
+async function ensureAudioContext(): Promise<AudioContext> {
+  if (!audioContext) {
+    // Use webkitAudioContext for older iOS versions
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+    audioContext = new AudioContextClass()
+  }
+  
+  // iOS requires resume() after user interaction
+  if (audioContext.state === 'suspended') {
+    await audioContext.resume()
+  }
+  
+  return audioContext
+}
+
 const assistantDisplayName = computed(() => props.assistantName || config.assistantName || 'AI Assistant')
 
 // Watch for transcript changes (voice input)
@@ -161,18 +177,25 @@ async function playAudioWithSync(base64Audio: string) {
   try {
     // Decode base64 audio
     const binaryString = atob(base64Audio)
-    const bytes = new Uint8Array(binaryString.length)
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i)
+    // Create ArrayBuffer directly - iOS compatible
+    const len = binaryString.length
+    const arrayBuffer = new ArrayBuffer(len)
+    const uint8Array = new Uint8Array(arrayBuffer)
+    for (let i = 0; i < len; i++) {
+      uint8Array[i] = binaryString.charCodeAt(i)
     }
 
-    // Create audio context
-    if (!audioContext) {
-      audioContext = new AudioContext()
-    }
+    // Ensure AudioContext is ready (iOS fix)
+    const ctx = await ensureAudioContext()
 
-    // Decode audio data
-    const audioBuffer = await audioContext.decodeAudioData(bytes.buffer)
+    // Decode audio data - iOS Safari requires callback-based API
+    const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+      ctx.decodeAudioData(
+        arrayBuffer,
+        (buffer) => resolve(buffer),
+        (error) => reject(error || new Error('Audio decode failed'))
+      )
+    })
 
     // Stop any existing audio
     if (audioSource) {
@@ -181,17 +204,17 @@ async function playAudioWithSync(base64Audio: string) {
     }
 
     // Create and play audio source
-    audioSource = audioContext.createBufferSource()
+    audioSource = ctx.createBufferSource()
     audioSource.buffer = audioBuffer
-    audioSource.connect(audioContext.destination)
+    audioSource.connect(ctx.destination)
 
     isSpeaking.value = true
-    startTime = audioContext.currentTime
+    startTime = ctx.currentTime
 
     // Update current time for viseme sync
     const updateTime = () => {
-      if (isSpeaking.value && audioContext) {
-        audioCurrentTime.value = audioContext.currentTime - startTime
+      if (isSpeaking.value && ctx) {
+        audioCurrentTime.value = ctx.currentTime - startTime
         requestAnimationFrame(updateTime)
       }
     }

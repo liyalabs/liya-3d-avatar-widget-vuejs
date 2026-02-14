@@ -27,6 +27,7 @@ export interface Translations {
     thinking: string
     speakToMic: string
     voiceNotSupported: string
+    notSupported: string
   }
   // File upload
   file: {
@@ -95,6 +96,7 @@ export const translations: Record<SupportedLocale, Translations> = {
       thinking: 'Düşünüyorum...',
       speakToMic: 'Konuşmak için mikrofona basın',
       voiceNotSupported: 'Ses tanıma desteklenmiyor',
+      notSupported: 'Ses tanıma bu tarayıcıda desteklenmiyor',
     },
     file: {
       upload: 'Dosya yükle',
@@ -166,6 +168,7 @@ export const translations: Record<SupportedLocale, Translations> = {
       thinking: 'Thinking...',
       speakToMic: 'Press the microphone to speak',
       voiceNotSupported: 'Voice recognition not supported',
+      notSupported: 'Voice recognition is not supported in this browser',
     },
     file: {
       upload: 'Upload file',

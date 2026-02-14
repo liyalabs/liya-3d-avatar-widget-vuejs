@@ -184,9 +184,73 @@ const currentVisemes = ref<Array<{ time: number; viseme: number; duration: numbe
 const audioCurrentTime = ref(0)
 const lastSpokenText = ref<string>('')
 let pendingSpeechText = ''
-let audioContext: AudioContext | null = null
 let audioSource: AudioBufferSourceNode | null = null
 let startTime = 0
+let audioSafetyTimeout: ReturnType<typeof setTimeout> | null = null
+let contextCreationAttempts = 0
+const MAX_CONTEXT_ATTEMPTS = 3
+
+// Global AudioContext - stored on window to share across ALL widget instances
+// This is critical for Safari which has issues with creating new contexts
+// Using window object ensures the same context is used even when widgets are destroyed/recreated
+declare global {
+  interface Window {
+    __liyaAvatarAudioContext?: AudioContext
+  }
+}
+
+// iOS/Safari AudioContext helper - must be called after user interaction
+async function ensureAudioContext(): Promise<AudioContext | null> {
+  // Check if global context exists on window and is usable
+  const existingContext = window.__liyaAvatarAudioContext
+  if (existingContext && existingContext.state !== 'closed') {
+    // If running, return immediately
+    if (existingContext.state === 'running') {
+      return existingContext
+    }
+    
+    // If suspended, try to resume with shorter timeout for Safari
+    if (existingContext.state === 'suspended') {
+      try {
+        const resumePromise = existingContext.resume()
+        const timeoutPromise = new Promise<void>((_, reject) => 
+          setTimeout(() => reject(new Error('AudioContext resume timeout')), 2000)
+        )
+        await Promise.race([resumePromise, timeoutPromise])
+      } catch (err) {
+        // Safari fix: If resume fails, continue with suspended context
+      }
+    }
+    
+    return existingContext
+  }
+  
+  // Safari fix: Limit context creation attempts to prevent memory leak
+  if (contextCreationAttempts >= MAX_CONTEXT_ATTEMPTS) {
+    console.warn('[LiyaAvatarWidget] Max AudioContext creation attempts reached')
+    return null
+  }
+  
+  // Create new global context on window
+  contextCreationAttempts++
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+  window.__liyaAvatarAudioContext = new AudioContextClass()
+  
+  // Try to resume if suspended
+  if (window.__liyaAvatarAudioContext.state === 'suspended') {
+    try {
+      const resumePromise = window.__liyaAvatarAudioContext.resume()
+      const timeoutPromise = new Promise<void>((_, reject) => 
+        setTimeout(() => reject(new Error('AudioContext resume timeout')), 2000)
+      )
+      await Promise.race([resumePromise, timeoutPromise])
+    } catch (err) {
+      // Continue with suspended AudioContext
+    }
+  }
+  
+  return window.__liyaAvatarAudioContext
+}
 
 // Debounce for speech buttons - prevent rapid clicking
 let lastSpeechActionTime = 0
@@ -211,6 +275,8 @@ const {
   transcript,
   startRecording,
   stopRecording,
+  checkMicPermission,
+  requestMicPermission,
 } = useVoice()
 
 function handleVoiceTranscript(text: string): void {
@@ -222,7 +288,11 @@ function handleVoiceTranscript(text: string): void {
 }
 
 function toggleKioskListening(): void {
-  if (!isVoiceSupported.value) return
+  // Show message if voice not supported (iOS Safari)
+  if (!isVoiceSupported.value) {
+    showVoiceNotSupportedMessage()
+    return
+  }
   if (kioskMicDisabled.value) return
   
   if (isRecording.value) {
@@ -231,6 +301,15 @@ function toggleKioskListening(): void {
     lastVoiceTranscript.value = ''
     startRecording()
   }
+}
+
+// Voice not supported message (for iOS)
+const voiceNotSupportedVisible = ref(false)
+function showVoiceNotSupportedMessage(): void {
+  voiceNotSupportedVisible.value = true
+  setTimeout(() => {
+    voiceNotSupportedVisible.value = false
+  }, 3000)
 }
 
 const assistantName = computed(() => config.assistantName || 'Assistant')
@@ -535,6 +614,12 @@ function updateKioskAvatarSize(): void {
 
 
 function stopSpeaking(): void {
+  // Clear safety timeout
+  if (audioSafetyTimeout) {
+    clearTimeout(audioSafetyTimeout)
+    audioSafetyTimeout = null
+  }
+  
   if (audioSource) {
     try {
       audioSource.stop()
@@ -550,9 +635,13 @@ function stopSpeaking(): void {
 }
 
 async function speakWithAvatar(text: string, isRepeat: boolean = false): Promise<void> {
-  if (!isAvatarVisible.value) return
+  if (!isAvatarVisible.value) {
+    return
+  }
   // Don't attempt to speak if user doesn't have access
-  if (hasAccessError.value) return
+  if (hasAccessError.value) {
+    return
+  }
   
   isPreparingSpeech.value = true
   
@@ -602,20 +691,42 @@ async function speakWithAvatar(text: string, isRepeat: boolean = false): Promise
 
 async function playAudioWithSync(base64Audio: string): Promise<void> {
   try {
+    // Decode base64 to ArrayBuffer - iOS compatible method
     const binaryString = atob(base64Audio)
-    const bytes = new Uint8Array(binaryString.length)
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i)
+    const len = binaryString.length
+    const arrayBuffer = new ArrayBuffer(len)
+    const uint8Array = new Uint8Array(arrayBuffer)
+    for (let i = 0; i < len; i++) {
+      uint8Array[i] = binaryString.charCodeAt(i)
     }
 
-    if (!audioContext) {
-      audioContext = new AudioContext()
+    // Ensure AudioContext is ready (iOS/Safari fix)
+    const ctx = await ensureAudioContext()
+    
+    // Safari fix: If context creation failed, skip audio playback
+    if (!ctx) {
+      isSpeaking.value = false
+      isPreparingSpeech.value = false
+      return
     }
-
-    const audioBuffer = await audioContext.decodeAudioData(bytes.buffer.slice(0))
+    
+    // iOS Safari requires callback-based decodeAudioData
+    const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+      ctx.decodeAudioData(
+        arrayBuffer,
+        (buffer) => resolve(buffer),
+        (error) => reject(error || new Error('Audio decode failed'))
+      )
+    })
 
     // Save visemes before stopping (stopSpeaking clears them)
     const savedVisemes = [...currentVisemes.value]
+    
+    // Clear any existing safety timeout
+    if (audioSafetyTimeout) {
+      clearTimeout(audioSafetyTimeout)
+      audioSafetyTimeout = null
+    }
     
     // Stop any existing audio (but don't clear visemes yet)
     if (audioSource) {
@@ -631,27 +742,42 @@ async function playAudioWithSync(base64Audio: string): Promise<void> {
     // Restore visemes
     currentVisemes.value = savedVisemes
 
-    audioSource = audioContext.createBufferSource()
+    audioSource = ctx.createBufferSource()
     audioSource.buffer = audioBuffer
-    audioSource.connect(audioContext.destination)
+    audioSource.connect(ctx.destination)
 
     isSpeaking.value = true
     isPreparingSpeech.value = false
-    startTime = audioContext.currentTime
+    startTime = ctx.currentTime
     
     if (pendingSpeechText) {
       lastSpokenText.value = pendingSpeechText
     }
 
     const updateTime = () => {
-      if (isSpeaking.value && audioContext) {
-        audioCurrentTime.value = audioContext.currentTime - startTime
+      if (isSpeaking.value && ctx) {
+        audioCurrentTime.value = ctx.currentTime - startTime
         requestAnimationFrame(updateTime)
       }
     }
     updateTime()
 
+    // Safari fix: Safety timeout - onended sometimes doesn't fire in Safari
+    const audioDurationMs = audioBuffer.duration * 1000
+    audioSafetyTimeout = setTimeout(() => {
+      if (isSpeaking.value) {
+        isSpeaking.value = false
+        audioCurrentTime.value = 0
+        currentVisemes.value = []
+      }
+    }, audioDurationMs + 500)
+
     audioSource.onended = () => {
+      // Clear safety timeout since onended fired properly
+      if (audioSafetyTimeout) {
+        clearTimeout(audioSafetyTimeout)
+        audioSafetyTimeout = null
+      }
       isSpeaking.value = false
       audioCurrentTime.value = 0
       currentVisemes.value = []
@@ -660,6 +786,7 @@ async function playAudioWithSync(base64Audio: string): Promise<void> {
     audioSource.start()
   } catch (error) {
     isSpeaking.value = false
+    isPreparingSpeech.value = false
   }
 }
 
@@ -708,13 +835,27 @@ function handleSuggestionClick(suggestion: string): void {
 
 onUnmounted(() => {
   stopSpeaking()
+  
+  // Safari fix: Clear all timers to prevent memory leak
   if (preparingTimer) {
     clearInterval(preparingTimer)
     preparingTimer = null
   }
-  if (audioContext) {
-    audioContext.close()
-    audioContext = null
+  if (audioSafetyTimeout) {
+    clearTimeout(audioSafetyTimeout)
+    audioSafetyTimeout = null
+  }
+  
+  // Don't close AudioContext - Safari has issues creating new ones after close
+  // Just stop the audio source, context will be garbage collected
+  if (audioSource) {
+    try {
+      audioSource.stop()
+      audioSource.disconnect()
+    } catch (e) {
+      // Ignore
+    }
+    audioSource = null
   }
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', updateKioskAvatarSize)
@@ -737,6 +878,15 @@ watch(
 
 onMounted(async () => {
   initFromStorage()
+  
+  // Request microphone permission early (before user clicks mic button)
+  if (isVoiceSupported.value) {
+    checkMicPermission().then(status => {
+      if (status === 'prompt') {
+        requestMicPermission()
+      }
+    })
+  }
   
   // First check user access before loading anything
   await checkAccess()
@@ -1072,11 +1222,12 @@ onMounted(async () => {
             </div>
 
             <button
-              v-if="isVoiceSupported"
+              v-if="showVoice"
               class="liya-3d-avatar-widget-vuejs-kiosk__mic"
               :class="{
                 'liya-3d-avatar-widget-vuejs-kiosk__mic--active': isRecording,
                 'liya-3d-avatar-widget-vuejs-kiosk__mic--disabled': kioskMicDisabled,
+                'liya-3d-avatar-widget-vuejs-kiosk__mic--not-supported': !isVoiceSupported,
               }"
               :disabled="kioskMicDisabled"
               @click="toggleKioskListening"
@@ -1093,6 +1244,19 @@ onMounted(async () => {
             <p class="liya-3d-avatar-widget-vuejs-kiosk__hint">
               {{ isRecording ? t.voice.listening : isLoading ? t.voice.thinking : t.voice.speakToMic }}
             </p>
+            
+            <!-- Voice Not Supported Toast (iOS) -->
+            <Transition name="liya-3d-avatar-widget-vuejs-toast">
+              <div 
+                v-if="voiceNotSupportedVisible" 
+                class="liya-3d-avatar-widget-vuejs-kiosk__toast"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                </svg>
+                <span>{{ t.voice.notSupported }}</span>
+              </div>
+            </Transition>
           </div>
         </div>
       </div>
@@ -1876,6 +2040,12 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
+.liya-3d-avatar-widget-vuejs-kiosk__mic--not-supported {
+  opacity: 0.6;
+  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+  box-shadow: 0 8px 24px rgba(107, 114, 128, 0.3);
+}
+
 .liya-3d-avatar-widget-vuejs-kiosk__hint {
   color: rgba(255, 255, 255, 0.6);
   font-size: 13px;
@@ -2040,5 +2210,36 @@ onMounted(async () => {
 .liya-3d-avatar-widget-vuejs-widget__premium-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(245, 158, 11, 0.4);
+}
+
+/* Voice Not Supported Toast */
+.liya-3d-avatar-widget-vuejs-kiosk__toast {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: rgba(239, 68, 68, 0.95);
+  color: white;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  white-space: nowrap;
+}
+
+.liya-3d-avatar-widget-vuejs-toast-enter-active,
+.liya-3d-avatar-widget-vuejs-toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.liya-3d-avatar-widget-vuejs-toast-enter-from,
+.liya-3d-avatar-widget-vuejs-toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
 }
 </style>

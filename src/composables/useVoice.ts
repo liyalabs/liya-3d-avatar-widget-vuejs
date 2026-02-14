@@ -36,8 +36,23 @@ const transcript = ref('')
 const interimTranscript = ref('')
 const error = ref<string | null>(null)
 const isSupported = ref(false)
+const isIOS = ref(false)
+const micPermission = ref<'prompt' | 'granted' | 'denied'>('prompt')
 
 let recognition: SpeechRecognition | null = null
+
+// Detect iOS device
+function detectIOS(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+  
+  const userAgent = navigator.userAgent || navigator.vendor || ''
+  // Check for iOS devices (iPhone, iPad, iPod)
+  const isIOSDevice = /iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream
+  // Also check for iPad on iOS 13+ which reports as Mac
+  const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+  
+  return isIOSDevice || isIPadOS
+}
 
 export function useVoice(locale = 'tr-TR') {
   // Check browser support
@@ -46,7 +61,44 @@ export function useVoice(locale = 'tr-TR') {
       ? window.SpeechRecognition || window.webkitSpeechRecognition 
       : null
 
-  isSupported.value = !!SpeechRecognitionAPI
+  // iOS Safari does NOT support SpeechRecognition API
+  isIOS.value = detectIOS()
+  isSupported.value = !!SpeechRecognitionAPI && !isIOS.value
+
+  // Check current microphone permission status
+  async function checkMicPermission(): Promise<'prompt' | 'granted' | 'denied'> {
+    if (typeof navigator === 'undefined' || !navigator.permissions) {
+      return 'prompt'
+    }
+    try {
+      const result = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+      micPermission.value = result.state as 'prompt' | 'granted' | 'denied'
+      // Listen for permission changes
+      result.onchange = () => {
+        micPermission.value = result.state as 'prompt' | 'granted' | 'denied'
+      }
+      return result.state as 'prompt' | 'granted' | 'denied'
+    } catch {
+      return 'prompt'
+    }
+  }
+
+  // Request microphone permission early (on widget open)
+  async function requestMicPermission(): Promise<boolean> {
+    if (!isSupported.value) {
+      return false
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Stop all tracks immediately - we just wanted the permission
+      stream.getTracks().forEach(track => track.stop())
+      micPermission.value = 'granted'
+      return true
+    } catch {
+      micPermission.value = 'denied'
+      return false
+    }
+  }
 
   const hasTranscript = computed(() => transcript.value.length > 0)
   const fullTranscript = computed(() => 
@@ -98,7 +150,12 @@ export function useVoice(locale = 'tr-TR') {
 
   function startRecording(): void {
     if (!isSupported.value) {
-      error.value = 'Speech recognition is not supported in this browser'
+      // Provide specific error message for iOS users
+      if (isIOS.value) {
+        error.value = 'Speech recognition is not supported on iOS Safari. Please use text input instead.'
+      } else {
+        error.value = 'Speech recognition is not supported in this browser'
+      }
       return
     }
 
@@ -167,6 +224,8 @@ export function useVoice(locale = 'tr-TR') {
     interimTranscript: readonly(interimTranscript),
     error: readonly(error),
     isSupported: readonly(isSupported),
+    isIOS: readonly(isIOS),
+    micPermission: readonly(micPermission),
     
     // Computed
     hasTranscript,
@@ -177,5 +236,7 @@ export function useVoice(locale = 'tr-TR') {
     stopRecording,
     cancelRecording,
     clearTranscript,
+    checkMicPermission,
+    requestMicPermission,
   }
 }

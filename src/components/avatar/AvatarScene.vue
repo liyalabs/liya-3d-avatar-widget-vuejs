@@ -77,6 +77,13 @@ let morphTargetMeshes: THREE.Mesh[] = []
 let animationFrameId: number | null = null
 let clock: THREE.Clock | null = null
 
+// Safari detection for performance optimizations
+const isSafari = typeof navigator !== 'undefined' && 
+  /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+
+// Safari fix: Animation loop control flag
+let isAnimating = false
+
 // Store current morph values for smooth interpolation
 let currentMorphValues: Record<string, number> = {}
 
@@ -114,7 +121,9 @@ function applySize(width: number, height: number): void {
 
   if (renderer) {
     renderer.setSize(width, height)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    // Safari fix: Lower pixel ratio to reduce GPU load (Retina can be 3x)
+    const maxPixelRatio = isSafari ? 1.5 : 2
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxPixelRatio))
   }
 
   if (camera) {
@@ -162,10 +171,12 @@ function initScene() {
   camera.position.set(0, 1.5, 1.5)
   camera.lookAt(0, 1.45, 0)
 
-  // Renderer
+  // Renderer - Safari/iOS optimized settings
   renderer = new THREE.WebGLRenderer({ 
-    antialias: true,
-    alpha: true 
+    antialias: !isSafari, // Safari: disable antialiasing for performance
+    alpha: true,
+    powerPreference: isSafari ? 'low-power' : 'high-performance',
+    preserveDrawingBuffer: true // Required for iOS/Safari WebGL stability
   })
   applySize(props.width, props.height)
   renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -198,6 +209,7 @@ function initScene() {
   }
 
   // Start animation loop
+  isAnimating = true
   animate()
 }
 
@@ -420,12 +432,15 @@ function loadModel(url: string) {
 }
 
 function animate() {
+  // Safari fix: Check if animation should continue before requesting next frame
+  if (!isAnimating) return
+  
   animationFrameId = requestAnimationFrame(animate)
 
   if (!scene || !camera || !renderer) return
 
   const delta = clock?.getDelta() || 0
-  const now = Date.now()
+  const now = performance.now() // More accurate and faster than Date.now()
 
   // Update animation mixer
   if (mixer) {
@@ -831,17 +846,15 @@ function resetMorphTargets() {
 }
 
 function cleanup() {
+  // Safari fix: Stop animation loop first
+  isAnimating = false
+  
   if (animationFrameId) {
     cancelAnimationFrame(animationFrameId)
+    animationFrameId = null
   }
 
-  if (renderer) {
-    renderer.dispose()
-    if (containerRef.value && renderer.domElement.parentNode === containerRef.value) {
-      containerRef.value.removeChild(renderer.domElement)
-    }
-  }
-
+  // Dispose scene objects first
   if (scene) {
     scene.traverse((object) => {
       if (object instanceof THREE.Mesh) {
@@ -855,16 +868,34 @@ function cleanup() {
     })
   }
 
+  // Safari fix: Force WebGL context loss to free GPU memory
+  if (renderer) {
+    renderer.dispose()
+    renderer.forceContextLoss()
+    
+    // Remove canvas from DOM
+    if (containerRef.value && renderer.domElement.parentNode === containerRef.value) {
+      containerRef.value.removeChild(renderer.domElement)
+    }
+  }
+
+  // Clear all references
   scene = null
   camera = null
   renderer = null
   model = null
   mixer = null
+  clock = null
   morphTargetMeshes = []
+  currentMorphValues = {}
   leftHandBone = null
   rightHandBone = null
   leftHandBaseRotation = null
   rightHandBaseRotation = null
+  leftEyeBone = null
+  rightEyeBone = null
+  leftEyeBaseScale = null
+  rightEyeBaseScale = null
 }
 
 // Watch for model URL changes
