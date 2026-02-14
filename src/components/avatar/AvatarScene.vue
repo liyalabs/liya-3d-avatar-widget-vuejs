@@ -948,6 +948,11 @@ onUnmounted(() => {
   height: 100%;
   border-radius: 16px;
   overflow: hidden;
+  pointer-events: none;
+}
+
+.liya-3d-avatar-widget-vuejs-avatar-scene :deep(canvas) {
+  pointer-events: none;
 }
 
 .liya-3d-avatar-widget-vuejs-avatar-loading {

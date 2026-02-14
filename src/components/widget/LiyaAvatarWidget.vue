@@ -1743,7 +1743,9 @@ onMounted(async () => {
   inset: 0;
   background: radial-gradient(circle at top, rgba(30, 41, 59, 0.4), rgba(8, 12, 24, 0.75));
   backdrop-filter: blur(10px);
-  pointer-events: none;
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: none !important;
+  isolation: isolate;
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__container {
@@ -1901,6 +1903,8 @@ onMounted(async () => {
   gap: 18px;
   padding-bottom: 24px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 3;
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__messages {
@@ -2022,6 +2026,8 @@ onMounted(async () => {
   justify-content: center;
   box-shadow: 0 18px 36px rgba(99, 102, 241, 0.35);
   transition: all 0.3s ease;
+  position: relative;
+  z-index: 10;
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__mic:hover:not(:disabled) {

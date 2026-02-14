@@ -54,6 +54,13 @@ function detectIOS(): boolean {
   return isIOSDevice || isIPadOS
 }
 
+// Detect Opera browser
+function detectOpera(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+  const userAgent = navigator.userAgent || ''
+  return userAgent.indexOf('OPR/') !== -1 || userAgent.indexOf('Opera') !== -1
+}
+
 export function useVoice(locale = 'tr-TR') {
   // Check browser support
   const SpeechRecognitionAPI = 
@@ -168,6 +175,17 @@ export function useVoice(locale = 'tr-TR') {
       
       try {
         recognition.start()
+        
+        // Opera workaround: recognition.start() may silently fail.
+        // If onstart hasn't fired within 3s, reset and show error.
+        if (detectOpera()) {
+          setTimeout(() => {
+            if (!isRecording.value && !error.value) {
+              error.value = 'Speech recognition failed to start. Please check microphone permissions in Opera settings.'
+              try { recognition?.abort() } catch (_) { /* ignore */ }
+            }
+          }, 3000)
+        }
       } catch (err) {
         error.value = 'Failed to start recording'
       }
