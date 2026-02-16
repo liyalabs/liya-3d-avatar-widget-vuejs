@@ -1005,6 +1005,8 @@ defineExpose({
 
 .liya-3d-avatar-widget-vuejs-avatar-scene :deep(canvas) {
   pointer-events: none;
+  display: block;
+  margin: 0 auto;
 }
 
 .liya-3d-avatar-widget-vuejs-avatar-loading {

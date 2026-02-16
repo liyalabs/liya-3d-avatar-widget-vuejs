@@ -1099,6 +1099,7 @@ onMounted(async () => {
           <!-- Avatar Scene (Full Area) - only show when has access -->
           <div v-else class="liya-3d-avatar-widget-vuejs-widget__avatar-container">
             <AvatarScene
+              ref="avatarSceneRef"
               :model-url="resolvedAvatarModelUrl"
               :width="380"
               :height="240"
@@ -1106,6 +1107,7 @@ onMounted(async () => {
               :visemes="currentVisemes"
               :current-time="audioCurrentTime"
               background-color="transparent"
+              @loaded="applyCurrentColors"
             />
           </div>
           
@@ -1145,6 +1147,18 @@ onMounted(async () => {
                 <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
               </svg>
             </button>
+            <!-- Settings Button (hidden when no access) -->
+            <button 
+              v-if="!hasAccessError"
+              class="liya-3d-avatar-widget-vuejs-widget__settings-btn"
+              :class="{ 'liya-3d-avatar-widget-vuejs-widget__settings-btn--active': isSettingsPanelOpen }"
+              @click="isSettingsPanelOpen = !isSettingsPanelOpen"
+              :title="t.settings.title"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+              </svg>
+            </button>
             <!-- Language Toggle Button (hidden when no access) -->
             <button 
               v-if="!hasAccessError"
@@ -1160,6 +1174,66 @@ onMounted(async () => {
               </svg>
             </button>
           </div>
+          
+          <!-- Settings Panel (Standard Widget Mode) -->
+          <Transition name="liya-3d-avatar-widget-vuejs-settings-panel">
+            <div v-if="isSettingsPanelOpen && !isKioskLayout" class="liya-3d-avatar-widget-vuejs-widget__settings-panel">
+              <div class="liya-3d-avatar-widget-vuejs-widget__settings-panel-header">
+                <h3 class="liya-3d-avatar-widget-vuejs-widget__settings-panel-title">{{ t.settings.outfitColors }}</h3>
+                <button 
+                  class="liya-3d-avatar-widget-vuejs-widget__settings-panel-close"
+                  @click="isSettingsPanelOpen = false"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                  </svg>
+                </button>
+              </div>
+              
+              <!-- Presets -->
+              <div class="liya-3d-avatar-widget-vuejs-widget__settings-panel-section">
+                <label class="liya-3d-avatar-widget-vuejs-widget__settings-panel-label">{{ t.settings.presets }}</label>
+                <div class="liya-3d-avatar-widget-vuejs-widget__settings-panel-presets">
+                  <button
+                    v-for="preset in colorPresets"
+                    :key="preset.id"
+                    class="liya-3d-avatar-widget-vuejs-widget__settings-panel-preset"
+                    :class="{ 'liya-3d-avatar-widget-vuejs-widget__settings-panel-preset--active': currentPresetId === preset.id }"
+                    :style="{ background: preset.top }"
+                    :title="preset.name"
+                    @click="setPreset(preset.id)"
+                  ></button>
+                </div>
+              </div>
+              
+              <!-- Custom Colors -->
+              <div class="liya-3d-avatar-widget-vuejs-widget__settings-panel-section">
+                <label class="liya-3d-avatar-widget-vuejs-widget__settings-panel-label">{{ t.settings.customColor }}</label>
+                <div class="liya-3d-avatar-widget-vuejs-widget__settings-panel-colors">
+                  <div class="liya-3d-avatar-widget-vuejs-widget__settings-panel-color-row">
+                    <span>{{ t.settings.top }}</span>
+                    <input type="color" :value="avatarColors.top" @input="(e) => setColor('top', (e.target as HTMLInputElement).value)" />
+                  </div>
+                  <div class="liya-3d-avatar-widget-vuejs-widget__settings-panel-color-row">
+                    <span>{{ t.settings.bottom }}</span>
+                    <input type="color" :value="avatarColors.bottom" @input="(e) => setColor('bottom', (e.target as HTMLInputElement).value)" />
+                  </div>
+                  <div class="liya-3d-avatar-widget-vuejs-widget__settings-panel-color-row">
+                    <span>{{ t.settings.footwear }}</span>
+                    <input type="color" :value="avatarColors.footwear" @input="(e) => setColor('footwear', (e.target as HTMLInputElement).value)" />
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Reset Button -->
+              <button 
+                class="liya-3d-avatar-widget-vuejs-widget__settings-panel-reset"
+                @click="resetColors"
+              >
+                {{ t.settings.reset }}
+              </button>
+            </div>
+          </Transition>
         </div>
 
         <!-- Lower Section: Chat -->
@@ -1210,6 +1284,27 @@ onMounted(async () => {
               <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
             </svg>
           </button>
+
+          <!-- Mic Permission Banner (Kiosk) -->
+          <Transition name="liya-3d-avatar-widget-vuejs-mic-permission">
+            <div v-if="isMicPermissionPending" class="liya-3d-avatar-widget-vuejs-kiosk__mic-permission">
+              <div class="liya-3d-avatar-widget-vuejs-kiosk__mic-permission-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+                  <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+              </div>
+              <div class="liya-3d-avatar-widget-vuejs-kiosk__mic-permission-text">
+                <span class="liya-3d-avatar-widget-vuejs-kiosk__mic-permission-title">{{ t.mic.permissionRequired }}</span>
+                <span class="liya-3d-avatar-widget-vuejs-kiosk__mic-permission-desc">{{ t.mic.permissionMessage }}</span>
+              </div>
+              <button 
+                class="liya-3d-avatar-widget-vuejs-kiosk__mic-permission-btn"
+                @click="handleMicPermissionRequest"
+              >
+                {{ t.mic.allowButton }}
+              </button>
+            </div>
+          </Transition>
 
           <div class="liya-3d-avatar-widget-vuejs-kiosk__avatar">
             <!-- Loading state while checking access -->
@@ -1852,6 +1947,30 @@ onMounted(async () => {
   background: rgba(239, 68, 68, 0.5);
 }
 
+.liya-3d-avatar-widget-vuejs-widget__settings-btn {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.05);
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-btn--active {
+  background: rgba(99, 102, 241, 0.3);
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
 .liya-3d-avatar-widget-vuejs-widget__lang-btn {
   background: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(10px);
@@ -1895,6 +2014,152 @@ onMounted(async () => {
 .liya-3d-avatar-widget-vuejs-widget__close:hover {
   background: rgba(255, 255, 255, 0.25);
   transform: scale(1.05);
+}
+
+/* Standard Widget Settings Panel */
+.liya-3d-avatar-widget-vuejs-widget__settings-panel {
+  position: absolute;
+  top: 52px;
+  right: 8px;
+  width: 220px;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-close:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-section {
+  margin-bottom: 12px;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-preset {
+  width: 24px;
+  height: 24px;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-preset:hover {
+  transform: scale(1.1);
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-preset--active {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-colors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-color-row span {
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-color-row input[type="color"] {
+  width: 28px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-color-row input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-color-row input[type="color"]::-webkit-color-swatch {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-reset {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.liya-3d-avatar-widget-vuejs-widget__settings-panel-reset:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #f1f5f9;
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .liya-3d-avatar-widget-vuejs-widget__branding {
@@ -1987,20 +2252,99 @@ onMounted(async () => {
   transform: scale(1.05);
 }
 
+/* Kiosk Mic Permission Banner */
+.liya-3d-avatar-widget-vuejs-kiosk__mic-permission {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.85) 0%, rgba(79, 70, 229, 0.9) 100%);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.3);
+  z-index: 50;
+  max-width: 90%;
+}
+
+.liya-3d-avatar-widget-vuejs-kiosk__mic-permission-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.liya-3d-avatar-widget-vuejs-kiosk__mic-permission-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.liya-3d-avatar-widget-vuejs-kiosk__mic-permission-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+}
+
+.liya-3d-avatar-widget-vuejs-kiosk__mic-permission-desc {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.liya-3d-avatar-widget-vuejs-kiosk__mic-permission-btn {
+  padding: 8px 16px;
+  background: white;
+  border: none;
+  border-radius: 8px;
+  color: #4f46e5;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.liya-3d-avatar-widget-vuejs-kiosk__mic-permission-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
+  transform: scale(1.02);
+}
+
+/* Mic Permission Transition */
+.liya-3d-avatar-widget-vuejs-mic-permission-enter-active,
+.liya-3d-avatar-widget-vuejs-mic-permission-leave-active {
+  transition: all 0.3s ease;
+}
+
+.liya-3d-avatar-widget-vuejs-mic-permission-enter-from,
+.liya-3d-avatar-widget-vuejs-mic-permission-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-10px);
+}
+
 .liya-3d-avatar-widget-vuejs-kiosk__avatar {
   position: relative;
-  width: min(720px, 90vw);
+  width: 100%;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   padding-top: 0;
-  margin-top: 0;
-  margin-bottom: 0;
+  margin: 0 auto;
   flex: 0 0 auto;
   height: calc(100vh - 380px);
   min-height: 300px;
   max-height: 480px;
   z-index: 2;
+  overflow: hidden;
 }
 
 /* Floating Status Indicator */
@@ -2321,7 +2665,7 @@ onMounted(async () => {
   }
 
   .liya-3d-avatar-widget-vuejs-kiosk__avatar {
-    width: min(520px, 92vw);
+    width: 100%;
   }
 }
 
