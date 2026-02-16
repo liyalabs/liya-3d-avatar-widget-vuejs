@@ -1,3 +1,18 @@
+/**
+ * ==================================================
+ * ██╗     ██╗██╗   ██╗ █████╗ 
+ * ██║     ██║╚██╗ ██╔╝██╔══██╗
+ * ██║     ██║ ╚████╔╝ ███████║
+ * ██║     ██║  ╚██╔╝  ██╔══██║
+ * ███████╗██║   ██║   ██║  ██║
+ * ╚══════╝╚═╝   ╚═╝   ╚═╝  ╚═╝
+ *        AI Assistant
+ * ==================================================
+ * Author / Creator : Mahmut Denizli (With help of LiyaAi)
+ * License          : MIT
+ * Connect          : liyalabs.com, info@liyalabs.com
+ * ==================================================
+ */
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as THREE from 'three'
@@ -112,6 +127,11 @@ let rightEyeBone: THREE.Object3D | null = null
 let leftEyeBaseScale: THREE.Vector3 | null = null
 let rightEyeBaseScale: THREE.Vector3 | null = null
 let hasEyeBlinkMorphs = false
+
+// Outfit mesh references for color changing
+let outfitTopMesh: THREE.Mesh | null = null
+let outfitBottomMesh: THREE.Mesh | null = null
+let outfitFootwearMesh: THREE.Mesh | null = null
 
 function applySize(width: number, height: number): void {
   if (containerRef.value) {
@@ -386,6 +406,17 @@ function loadModel(url: string) {
         } else if (!rightEyeBone && (name === 'righteye' || name === 'eye_r' || name === 'eyeright')) {
           rightEyeBone = child
           rightEyeBaseScale = child.scale.clone()
+        }
+        
+        // Find outfit meshes for color changing (exact name match)
+        if (child instanceof THREE.Mesh) {
+          if (child.name === 'Wolf3D_Outfit_Top') {
+            outfitTopMesh = child
+          } else if (child.name === 'Wolf3D_Outfit_Bottom') {
+            outfitBottomMesh = child
+          } else if (child.name === 'Wolf3D_Outfit_Footwear') {
+            outfitFootwearMesh = child
+          }
         }
       })
       
@@ -926,6 +957,27 @@ onMounted(() => {
 
 onUnmounted(() => {
   cleanup()
+})
+
+// Apply outfit colors to avatar meshes
+function applyOutfitColors(colors: { top: string; bottom: string; footwear: string }): void {
+  if (outfitTopMesh?.material) {
+    const mat = outfitTopMesh.material as THREE.MeshStandardMaterial
+    mat.color.set(colors.top)
+  }
+  if (outfitBottomMesh?.material) {
+    const mat = outfitBottomMesh.material as THREE.MeshStandardMaterial
+    mat.color.set(colors.bottom)
+  }
+  if (outfitFootwearMesh?.material) {
+    const mat = outfitFootwearMesh.material as THREE.MeshStandardMaterial
+    mat.color.set(colors.footwear)
+  }
+}
+
+// Expose methods for parent component
+defineExpose({
+  applyOutfitColors
 })
 </script>
 

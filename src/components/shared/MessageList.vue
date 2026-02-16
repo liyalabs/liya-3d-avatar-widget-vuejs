@@ -1,3 +1,18 @@
+/**
+ * ==================================================
+ * ██╗     ██╗██╗   ██╗ █████╗ 
+ * ██║     ██║╚██╗ ██╔╝██╔══██╗
+ * ██║     ██║ ╚████╔╝ ███████║
+ * ██║     ██║  ╚██╔╝  ██╔══██║
+ * ███████╗██║   ██║   ██║  ██║
+ * ╚══════╝╚═╝   ╚═╝   ╚═╝  ╚═╝
+ *        AI Assistant
+ * ==================================================
+ * Author / Creator : Mahmut Denizli (With help of LiyaAi)
+ * License          : MIT
+ * Connect          : liyalabs.com, info@liyalabs.com
+ * ==================================================
+ */
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted } from 'vue'
 import type { Message } from '../../types'

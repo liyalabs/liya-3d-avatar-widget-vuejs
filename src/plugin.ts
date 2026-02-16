@@ -1,3 +1,18 @@
+/**
+ * ==================================================
+ * ██╗     ██╗██╗   ██╗ █████╗ 
+ * ██║     ██║╚██╗ ██╔╝██╔══██╗
+ * ██║     ██║ ╚████╔╝ ███████║
+ * ██║     ██║  ╚██╔╝  ██╔══██║
+ * ███████╗██║   ██║   ██║  ██║
+ * ╚══════╝╚═╝   ╚═╝   ╚═╝  ╚═╝
+ *        AI Assistant
+ * ==================================================
+ * Author / Creator : Mahmut Denizli (With help of LiyaAi)
+ * License          : MIT
+ * Connect          : liyalabs.com, info@liyalabs.com
+ * ==================================================
+ */
 // Liya 3D Avatar Widget - Vue Plugin
 import type { App } from 'vue'
 import type { LiyaChatConfig } from './types'

@@ -1,9 +1,26 @@
+/**
+ * ==================================================
+ * ██╗     ██╗██╗   ██╗ █████╗ 
+ * ██║     ██║╚██╗ ██╔╝██╔══██╗
+ * ██║     ██║ ╚████╔╝ ███████║
+ * ██║     ██║  ╚██╔╝  ██╔══██║
+ * ███████╗██║   ██║   ██║  ██║
+ * ╚══════╝╚═╝   ╚═╝   ╚═╝  ╚═╝
+ *        AI Assistant
+ * ==================================================
+ * Author / Creator : Mahmut Denizli (With help of LiyaAi)
+ * License          : MIT
+ * Connect          : liyalabs.com, info@liyalabs.com
+ * ==================================================
+ */
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import type { ThemeConfig, LiyaWidgetMode } from '../../types'
 import { useChat } from '../../composables/useChat'
 import { useFileUpload } from '../../composables/useFileUpload'
 import { useVoice } from '../../composables/useVoice'
+import { checkBrowserCompatibility } from '../../composables/useBrowserCompat'
+import { useAvatarColors } from '../../composables/useAvatarColors'
 import { getConfig, getAvatarModel, checkUserAccess } from '../../api'
 import { useI18n } from '../../i18n'
 import MessageList from '../shared/MessageList.vue'
@@ -95,6 +112,46 @@ const backendAvatarModelUrl = ref('')
 // Access error state
 const accessError = ref<{ code: string; message: string } | null>(null)
 const isCheckingAccess = ref(true)
+
+// Browser compatibility state
+const isBrowserSupported = ref(true)
+const browserCompatReason = ref<string | undefined>(undefined)
+
+// Microphone permission gate state
+const isMicPermissionPending = ref(false)
+
+// Message box visibility state (for kiosk/modal_kiosk)
+const isMessageBoxVisible = ref(true)
+
+// Settings panel visibility state
+const isSettingsPanelOpen = ref(false)
+
+// Avatar colors composable
+const { colors: avatarColors, presets: colorPresets, currentPresetId, setPreset, setColor, reset: resetColors, init: initColors } = useAvatarColors()
+
+// AvatarScene ref for color application
+const avatarSceneRef = ref<InstanceType<typeof AvatarScene> | null>(null)
+
+// Apply colors when avatar is loaded
+function onAvatarLoaded(): void {
+  applyCurrentColors()
+}
+
+// Apply current colors to avatar
+function applyCurrentColors(): void {
+  if (avatarSceneRef.value?.applyOutfitColors) {
+    avatarSceneRef.value.applyOutfitColors({
+      top: avatarColors.value.top,
+      bottom: avatarColors.value.bottom,
+      footwear: avatarColors.value.footwear
+    })
+  }
+}
+
+// Watch for color changes and apply them
+watch(avatarColors, () => {
+  applyCurrentColors()
+}, { deep: true })
 
 // Ensure URL uses HTTPS for security (Mixed Content fix)
 function ensureHttps(url: string): string {
@@ -557,6 +614,12 @@ watch(locale, () => {
   }
 })
 
+// Handle mic permission request
+async function handleMicPermissionRequest(): Promise<void> {
+  await requestMicPermission()
+  isMicPermissionPending.value = false
+}
+
 function openWidget(): void {
   if (!isOpen.value) {
     isOpen.value = true
@@ -606,9 +669,10 @@ function updateKioskAvatarSize(): void {
   const height = window.innerHeight
   const widthFactor = isModalKiosk.value ? 0.42 : 0.55
   const heightFactor = isModalKiosk.value ? 0.6 : 0.68
+  // Removed max limits to allow larger avatars on big screens (27"+)
   kioskAvatarSize.value = {
-    width: Math.min(Math.max(width * widthFactor, 320), 720),
-    height: Math.min(Math.max(height * heightFactor, 360), 760),
+    width: Math.max(width * widthFactor, 320),
+    height: Math.max(height * heightFactor, 360),
   }
 }
 
@@ -877,15 +941,27 @@ watch(
 )
 
 onMounted(async () => {
+  // Check browser compatibility first
+  const compat = checkBrowserCompatibility()
+  isBrowserSupported.value = compat.supported
+  browserCompatReason.value = compat.reason
+  
+  if (!compat.supported) {
+    isCheckingAccess.value = false
+    return
+  }
+  
   initFromStorage()
+  
+  // Initialize avatar colors from localStorage
+  initColors()
   
   // Request microphone permission early (before user clicks mic button)
   if (isVoiceSupported.value) {
-    checkMicPermission().then(status => {
-      if (status === 'prompt') {
-        requestMicPermission()
-      }
-    })
+    const status = await checkMicPermission()
+    if (status === 'prompt') {
+      isMicPermissionPending.value = true
+    }
   }
   
   // First check user access before loading anything
@@ -919,7 +995,21 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div v-if="!isKioskLayout" class="liya-3d-avatar-widget-vuejs-widget" :class="positionClasses" :style="cssVars">
+  <!-- Browser Not Supported Card -->
+  <div v-if="!isBrowserSupported" class="liya-3d-avatar-widget-vuejs-unsupported" :style="cssVars">
+    <div class="liya-3d-avatar-widget-vuejs-unsupported__card">
+      <div class="liya-3d-avatar-widget-vuejs-unsupported__icon">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+        </svg>
+      </div>
+      <h3 class="liya-3d-avatar-widget-vuejs-unsupported__title">{{ t.browser.unsupportedTitle }}</h3>
+      <p class="liya-3d-avatar-widget-vuejs-unsupported__message">{{ t.browser.unsupportedMessage }}</p>
+      <p class="liya-3d-avatar-widget-vuejs-unsupported__browsers">{{ t.browser.recommendedBrowsers }}</p>
+    </div>
+  </div>
+
+  <div v-else-if="!isKioskLayout" class="liya-3d-avatar-widget-vuejs-widget" :class="positionClasses" :style="cssVars">
     <!-- Toggle Button -->
     <button
       class="liya-3d-avatar-widget-vuejs-widget__toggle"
@@ -954,6 +1044,25 @@ onMounted(async () => {
     <!-- Chat Panel -->
     <Transition name="liya-3d-avatar-widget-vuejs-slide">
       <div v-if="isOpen" class="liya-3d-avatar-widget-vuejs-widget__panel">
+        <!-- Mic Permission Banner -->
+        <div v-if="isMicPermissionPending" class="liya-3d-avatar-widget-vuejs-mic-permission">
+          <div class="liya-3d-avatar-widget-vuejs-mic-permission__icon">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+          </div>
+          <div class="liya-3d-avatar-widget-vuejs-mic-permission__text">
+            <span class="liya-3d-avatar-widget-vuejs-mic-permission__title">{{ t.mic.permissionRequired }}</span>
+            <span class="liya-3d-avatar-widget-vuejs-mic-permission__desc">{{ t.mic.permissionMessage }}</span>
+          </div>
+          <button 
+            class="liya-3d-avatar-widget-vuejs-mic-permission__btn"
+            @click="handleMicPermissionRequest"
+          >
+            {{ t.mic.allowButton }}
+          </button>
+        </div>
+
         <!-- Upper Section: Avatar with Liquid Glass Header -->
         <div class="liya-3d-avatar-widget-vuejs-widget__upper">
           <!-- Loading state while checking access -->
@@ -1086,7 +1195,7 @@ onMounted(async () => {
 
   </div>
 
-  <div v-else class="liya-3d-avatar-widget-vuejs-kiosk" :class="{ 'liya-3d-avatar-widget-vuejs-kiosk--modal': isModalKiosk }" :style="cssVars">
+  <div v-else-if="isBrowserSupported" class="liya-3d-avatar-widget-vuejs-kiosk" :class="{ 'liya-3d-avatar-widget-vuejs-kiosk--modal': isModalKiosk }" :style="cssVars">
     <Transition name="liya-3d-avatar-widget-vuejs-kiosk-fade">
       <div v-if="isOpen" class="liya-3d-avatar-widget-vuejs-kiosk__content">
         <div v-if="isModalKiosk" class="liya-3d-avatar-widget-vuejs-kiosk__overlay"></div>
@@ -1137,6 +1246,7 @@ onMounted(async () => {
             <!-- Avatar Scene - only show when has access -->
             <AvatarScene
               v-else
+              ref="avatarSceneRef"
               :model-url="resolvedAvatarModelUrl"
               :width="kioskAvatarSize.width"
               :height="kioskAvatarSize.height"
@@ -1144,6 +1254,7 @@ onMounted(async () => {
               :visemes="currentVisemes"
               :current-time="audioCurrentTime"
               background-color="transparent"
+              @loaded="onAvatarLoaded"
             />
             
             <!-- Floating Status Indicator -->
@@ -1183,11 +1294,98 @@ onMounted(async () => {
               >
                 <span class="liya-3d-avatar-widget-vuejs-kiosk__lang-text">{{ locale === 'tr' ? 'EN' : 'TR' }}</span>
               </button>
+              <!-- Settings Button -->
+              <button 
+                class="liya-3d-avatar-widget-vuejs-kiosk__status-btn liya-3d-avatar-widget-vuejs-kiosk__settings-btn"
+                @click="isSettingsPanelOpen = !isSettingsPanelOpen"
+                :title="t.settings.title"
+                :class="{ 'liya-3d-avatar-widget-vuejs-kiosk__settings-btn--active': isSettingsPanelOpen }"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                  <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                </svg>
+              </button>
             </div>
+            
+            <!-- Settings Panel -->
+            <Transition name="liya-3d-avatar-widget-vuejs-settings-panel">
+              <div v-if="isSettingsPanelOpen" class="liya-3d-avatar-widget-vuejs-settings-panel">
+                <div class="liya-3d-avatar-widget-vuejs-settings-panel__header">
+                  <h3 class="liya-3d-avatar-widget-vuejs-settings-panel__title">{{ t.settings.outfitColors }}</h3>
+                  <button 
+                    class="liya-3d-avatar-widget-vuejs-settings-panel__close"
+                    @click="isSettingsPanelOpen = false"
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                    </svg>
+                  </button>
+                </div>
+                
+                <!-- Presets -->
+                <div class="liya-3d-avatar-widget-vuejs-settings-panel__section">
+                  <label class="liya-3d-avatar-widget-vuejs-settings-panel__label">{{ t.settings.presets }}</label>
+                  <div class="liya-3d-avatar-widget-vuejs-settings-panel__presets">
+                    <button
+                      v-for="preset in colorPresets"
+                      :key="preset.id"
+                      class="liya-3d-avatar-widget-vuejs-settings-panel__preset"
+                      :class="{ 'liya-3d-avatar-widget-vuejs-settings-panel__preset--active': currentPresetId === preset.id }"
+                      :style="{ background: preset.top }"
+                      :title="preset.name"
+                      @click="setPreset(preset.id)"
+                    ></button>
+                  </div>
+                </div>
+                
+                <!-- Custom Colors -->
+                <div class="liya-3d-avatar-widget-vuejs-settings-panel__section">
+                  <label class="liya-3d-avatar-widget-vuejs-settings-panel__label">{{ t.settings.customColor }}</label>
+                  <div class="liya-3d-avatar-widget-vuejs-settings-panel__colors">
+                    <div class="liya-3d-avatar-widget-vuejs-settings-panel__color-row">
+                      <span>{{ t.settings.top }}</span>
+                      <input type="color" :value="avatarColors.top" @input="(e) => setColor('top', (e.target as HTMLInputElement).value)" />
+                    </div>
+                    <div class="liya-3d-avatar-widget-vuejs-settings-panel__color-row">
+                      <span>{{ t.settings.bottom }}</span>
+                      <input type="color" :value="avatarColors.bottom" @input="(e) => setColor('bottom', (e.target as HTMLInputElement).value)" />
+                    </div>
+                    <div class="liya-3d-avatar-widget-vuejs-settings-panel__color-row">
+                      <span>{{ t.settings.footwear }}</span>
+                      <input type="color" :value="avatarColors.footwear" @input="(e) => setColor('footwear', (e.target as HTMLInputElement).value)" />
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Reset Button -->
+                <button 
+                  class="liya-3d-avatar-widget-vuejs-settings-panel__reset"
+                  @click="resetColors"
+                >
+                  {{ t.settings.reset }}
+                </button>
+              </div>
+            </Transition>
           </div>
 
           <div class="liya-3d-avatar-widget-vuejs-kiosk__controls">
-            <div class="liya-3d-avatar-widget-vuejs-kiosk__messages">
+            <!-- Message Box Toggle Button -->
+            <button 
+              class="liya-3d-avatar-widget-vuejs-kiosk__toggle-msg-btn"
+              @click="isMessageBoxVisible = !isMessageBoxVisible"
+              :title="isMessageBoxVisible ? t.kiosk.hideMessages : t.kiosk.showMessages"
+            >
+              <!-- Eye icon (visible) -->
+              <svg v-if="isMessageBoxVisible" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+              </svg>
+              <!-- Eye-off icon (hidden) -->
+              <svg v-else viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46A11.804 11.804 0 0 0 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>
+              </svg>
+            </button>
+            <Transition name="liya-3d-avatar-widget-vuejs-msg-toggle">
+              <div v-show="isMessageBoxVisible" class="liya-3d-avatar-widget-vuejs-kiosk__messages">
               <template v-for="(message, index) in kioskMessages" :key="`kiosk-message-${index}`">
                 <!-- User message: show content -->
                 <p
@@ -1219,7 +1417,8 @@ onMounted(async () => {
                   <p v-else class="liya-3d-avatar-widget-vuejs-kiosk__message-text">{{ message.content }}</p>
                 </div>
               </template>
-            </div>
+              </div>
+            </Transition>
 
             <button
               v-if="showVoice"
@@ -1752,7 +1951,7 @@ onMounted(async () => {
   position: relative;
   width: min(960px, 100%);
   height: 100%;
-  padding: 40px 24px 36px;
+  padding: clamp(24px, 3vh, 60px) clamp(16px, 2vw, 48px) clamp(24px, 3vh, 48px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1908,9 +2107,9 @@ onMounted(async () => {
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__messages {
-  width: min(520px, 90vw);
-  height: 180px;
-  max-height: 180px;
+  width: clamp(320px, 40vw, 720px);
+  height: clamp(140px, 18vh, 300px);
+  max-height: clamp(140px, 18vh, 300px);
   background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 
@@ -2126,6 +2325,30 @@ onMounted(async () => {
   }
 }
 
+/* Large screen optimizations (27"+ monitors) */
+@media (min-width: 1920px) {
+  .liya-3d-avatar-widget-vuejs-kiosk__messages {
+    font-size: 15px;
+    border-radius: 24px;
+    padding: 18px 20px;
+  }
+  
+  .liya-3d-avatar-widget-vuejs-kiosk__mic {
+    width: 84px;
+    height: 84px;
+  }
+  
+  .liya-3d-avatar-widget-vuejs-kiosk__suggestion-btn {
+    font-size: 14px;
+    padding: 10px 18px;
+  }
+  
+  .liya-3d-avatar-widget-vuejs-kiosk__message {
+    font-size: 15px;
+    padding: 12px 16px;
+  }
+}
+
 /* Access Loading Styles */
 .liya-3d-avatar-widget-vuejs-widget__access-loading {
   position: absolute;
@@ -2247,5 +2470,324 @@ onMounted(async () => {
 .liya-3d-avatar-widget-vuejs-toast-leave-to {
   opacity: 0;
   transform: translateX(-50%) translateY(20px);
+}
+
+/* Browser Not Supported Card */
+.liya-3d-avatar-widget-vuejs-unsupported {
+  position: fixed;
+  bottom: var(--liya-3d-avatar-widget-vuejs-offset-y, 20px);
+  right: var(--liya-3d-avatar-widget-vuejs-offset-x, 20px);
+  z-index: var(--liya-3d-avatar-widget-vuejs-z-index, 9999);
+  font-family: var(--liya-3d-avatar-widget-vuejs-font-family);
+}
+
+.liya-3d-avatar-widget-vuejs-unsupported__card {
+  width: 340px;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  text-align: center;
+}
+
+.liya-3d-avatar-widget-vuejs-unsupported__icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+}
+
+.liya-3d-avatar-widget-vuejs-unsupported__title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.liya-3d-avatar-widget-vuejs-unsupported__message {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.liya-3d-avatar-widget-vuejs-unsupported__browsers {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Mic Permission Banner */
+.liya-3d-avatar-widget-vuejs-mic-permission {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.liya-3d-avatar-widget-vuejs-mic-permission__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #a5b4fc;
+  flex-shrink: 0;
+}
+
+.liya-3d-avatar-widget-vuejs-mic-permission__text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.liya-3d-avatar-widget-vuejs-mic-permission__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.liya-3d-avatar-widget-vuejs-mic-permission__desc {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.liya-3d-avatar-widget-vuejs-mic-permission__btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.liya-3d-avatar-widget-vuejs-mic-permission__btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+/* Message Box Toggle Button */
+.liya-3d-avatar-widget-vuejs-kiosk__toggle-msg-btn {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.liya-3d-avatar-widget-vuejs-kiosk__toggle-msg-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  transform: scale(1.05);
+}
+
+/* Message Box Toggle Transition */
+.liya-3d-avatar-widget-vuejs-msg-toggle-enter-active,
+.liya-3d-avatar-widget-vuejs-msg-toggle-leave-active {
+  transition: all 0.3s ease;
+}
+
+.liya-3d-avatar-widget-vuejs-msg-toggle-enter-from,
+.liya-3d-avatar-widget-vuejs-msg-toggle-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+  max-height: 0;
+  margin-bottom: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Settings Button */
+.liya-3d-avatar-widget-vuejs-kiosk__settings-btn--active {
+  background: rgba(99, 102, 241, 0.3) !important;
+  color: #a5b4fc !important;
+}
+
+/* Settings Panel */
+.liya-3d-avatar-widget-vuejs-settings-panel {
+  position: absolute;
+  top: 80px;
+  right: 24px;
+  width: 280px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 16px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__close:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__section {
+  margin-bottom: 16px;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__preset {
+  width: 28px;
+  height: 28px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__preset:hover {
+  transform: scale(1.1);
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__preset--active {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__colors {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__color-row span {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__color-row input[type="color"] {
+  width: 32px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__color-row input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__color-row input[type="color"]::-webkit-color-swatch {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__reset {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel__reset:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #f1f5f9;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Settings Panel Transition */
+.liya-3d-avatar-widget-vuejs-settings-panel-enter-active,
+.liya-3d-avatar-widget-vuejs-settings-panel-leave-active {
+  transition: all 0.3s ease;
+}
+
+.liya-3d-avatar-widget-vuejs-settings-panel-enter-from,
+.liya-3d-avatar-widget-vuejs-settings-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
 }
 </style>

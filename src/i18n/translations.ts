@@ -1,3 +1,18 @@
+/**
+ * ==================================================
+ * ██╗     ██╗██╗   ██╗ █████╗ 
+ * ██║     ██║╚██╗ ██╔╝██╔══██╗
+ * ██║     ██║ ╚████╔╝ ███████║
+ * ██║     ██║  ╚██╔╝  ██╔══██║
+ * ███████╗██║   ██║   ██║  ██║
+ * ╚══════╝╚═╝   ╚═╝   ╚═╝  ╚═╝
+ *        AI Assistant
+ * ==================================================
+ * Author / Creator : Mahmut Denizli (With help of LiyaAi)
+ * License          : MIT
+ * Connect          : liyalabs.com, info@liyalabs.com
+ * ==================================================
+ */
 // Liya AI Widget - Internationalization Translations
 
 export type SupportedLocale = 'tr' | 'en'
@@ -10,6 +25,21 @@ export interface Translations {
     online: string
     preparing: string
     speaking: string
+  }
+  // Browser compatibility
+  browser: {
+    unsupportedTitle: string
+    unsupportedMessage: string
+    webglRequired: string
+    recommendedBrowsers: string
+    closeButton: string
+  }
+  // Microphone permission
+  mic: {
+    permissionRequired: string
+    permissionMessage: string
+    allowButton: string
+    denied: string
   }
   // Chat
   chat: {
@@ -46,6 +76,8 @@ export interface Translations {
     listening: string
     preparing: string
     speaking: string
+    hideMessages: string
+    showMessages: string
   }
   // Rotating preparing messages (long processing)
   preparingMessages: string[]
@@ -67,6 +99,17 @@ export interface Translations {
     upgradeToPremium: string
     upgradeToPremiumPlus: string
   }
+  // Settings
+  settings: {
+    title: string
+    outfitColors: string
+    top: string
+    bottom: string
+    footwear: string
+    presets: string
+    customColor: string
+    reset: string
+  }
 }
 
 export const translations: Record<SupportedLocale, Translations> = {
@@ -77,6 +120,19 @@ export const translations: Record<SupportedLocale, Translations> = {
       online: 'Çevrimiçi',
       preparing: 'Hazırlanıyor...',
       speaking: 'Konuşuyor...',
+    },
+    browser: {
+      unsupportedTitle: 'Tarayıcı Desteklenmiyor',
+      unsupportedMessage: 'Bu widget tarayıcınızda çalışmıyor. 3D avatar için WebGL desteği gereklidir.',
+      webglRequired: 'WebGL desteği gerekli',
+      recommendedBrowsers: 'Önerilen: Chrome, Edge, Firefox, Safari',
+      closeButton: 'Kapat',
+    },
+    mic: {
+      permissionRequired: 'Mikrofon İzni Gerekli',
+      permissionMessage: 'Sesli iletişim için mikrofon erişimine izin verin.',
+      allowButton: 'İzin Ver',
+      denied: 'Mikrofon izni reddedildi',
     },
     chat: {
       placeholder: 'Mesajınızı yazın...',
@@ -113,6 +169,8 @@ export const translations: Record<SupportedLocale, Translations> = {
       listening: 'Dinliyorum...',
       preparing: 'Hazırlanıyor...',
       speaking: 'Konuşuyor...',
+      hideMessages: 'Mesajları gizle',
+      showMessages: 'Mesajları göster',
     },
     preparingMessages: [
       'Hazırlanıyor...',
@@ -141,6 +199,16 @@ export const translations: Record<SupportedLocale, Translations> = {
       upgradeToPremium: '3D Avatar Widget kullanmak için Premium veya Premium Plus planına yükseltin.',
       upgradeToPremiumPlus: 'Özel 3D avatar yüklemek için Premium Plus planına yükseltin.',
     },
+    settings: {
+      title: 'Ayarlar',
+      outfitColors: 'Kıyafet Renkleri',
+      top: 'Üst',
+      bottom: 'Alt',
+      footwear: 'Ayakkabı',
+      presets: 'Hazır Renkler',
+      customColor: 'Özel Renk',
+      reset: 'Sıfırla',
+    },
   },
   en: {
     widget: {
@@ -149,6 +217,19 @@ export const translations: Record<SupportedLocale, Translations> = {
       online: 'Online',
       preparing: 'Preparing...',
       speaking: 'Speaking...',
+    },
+    browser: {
+      unsupportedTitle: 'Browser Not Supported',
+      unsupportedMessage: 'This widget does not work in your browser. WebGL support is required for 3D avatar.',
+      webglRequired: 'WebGL support required',
+      recommendedBrowsers: 'Recommended: Chrome, Edge, Firefox, Safari',
+      closeButton: 'Close',
+    },
+    mic: {
+      permissionRequired: 'Microphone Permission Required',
+      permissionMessage: 'Allow microphone access for voice communication.',
+      allowButton: 'Allow',
+      denied: 'Microphone permission denied',
     },
     chat: {
       placeholder: 'Type your message...',
@@ -185,6 +266,8 @@ export const translations: Record<SupportedLocale, Translations> = {
       listening: 'Listening...',
       preparing: 'Preparing...',
       speaking: 'Speaking...',
+      hideMessages: 'Hide messages',
+      showMessages: 'Show messages',
     },
     preparingMessages: [
       'Preparing...',
@@ -212,6 +295,16 @@ export const translations: Record<SupportedLocale, Translations> = {
       featureNotAvailable: 'This feature is not available in your current plan',
       upgradeToPremium: 'Upgrade to Premium or Premium Plus to use the 3D Avatar Widget.',
       upgradeToPremiumPlus: 'Upgrade to Premium Plus to upload custom 3D avatars.',
+    },
+    settings: {
+      title: 'Settings',
+      outfitColors: 'Outfit Colors',
+      top: 'Top',
+      bottom: 'Bottom',
+      footwear: 'Footwear',
+      presets: 'Presets',
+      customColor: 'Custom Color',
+      reset: 'Reset',
     },
   },
 }
