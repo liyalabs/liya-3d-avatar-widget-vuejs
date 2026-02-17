@@ -3134,4 +3134,87 @@ onMounted(async () => {
   opacity: 0;
   transform: translateY(-10px) scale(0.95);
 }
+
+/* Mobile Responsive - Kiosk Mode */
+@media (max-width: 768px) {
+  .liya-3d-avatar-widget-vuejs-kiosk__avatar {
+    height: calc(100vh - 340px);
+    height: calc(100dvh - 340px);
+    min-height: 240px;
+    max-height: 360px;
+  }
+  
+  .liya-3d-avatar-widget-vuejs-kiosk__messages {
+    width: clamp(280px, 85vw, 720px);
+    height: clamp(120px, 16vh, 240px);
+    max-height: clamp(120px, 16vh, 240px);
+    padding: 12px 14px;
+  }
+  
+  .liya-3d-avatar-widget-vuejs-kiosk__controls {
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    gap: 14px;
+  }
+  
+  .liya-3d-avatar-widget-vuejs-kiosk__status {
+    top: calc(20px + env(safe-area-inset-top, 0px));
+    padding: 6px 12px;
+  }
+  
+  .liya-3d-avatar-widget-vuejs-kiosk__status-text {
+    font-size: 12px;
+  }
+  
+  .liya-3d-avatar-widget-vuejs-settings-panel {
+    max-height: 70vh;
+    overflow-y: auto;
+    right: 10px;
+    top: calc(70px + env(safe-area-inset-top, 0px));
+  }
+}
+
+@media (max-width: 480px) {
+  .liya-3d-avatar-widget-vuejs-kiosk__avatar {
+    height: calc(100vh - 300px);
+    height: calc(100dvh - 300px);
+    min-height: 200px;
+    max-height: 280px;
+  }
+  
+  .liya-3d-avatar-widget-vuejs-kiosk__messages {
+    width: clamp(260px, 92vw, 720px);
+    height: clamp(100px, 14vh, 200px);
+    max-height: clamp(100px, 14vh, 200px);
+    padding: 10px 12px;
+    border-radius: 16px;
+  }
+  
+  .liya-3d-avatar-widget-vuejs-kiosk__message {
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+  
+  .liya-3d-avatar-widget-vuejs-kiosk__controls {
+    gap: 12px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  
+  .liya-3d-avatar-widget-vuejs-kiosk__suggestion-btn {
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+  
+  .liya-3d-avatar-widget-vuejs-settings-panel {
+    width: calc(100vw - 20px);
+    max-width: 300px;
+    right: 10px;
+  }
+}
+
+/* iOS Safe Area Support */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .liya-3d-avatar-widget-vuejs-kiosk__controls {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+}
 </style>
