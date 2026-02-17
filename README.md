@@ -1,6 +1,31 @@
-# @liyalabs/liya-3d-avatar-widget
+# @liyalabs/liya-3d-avatar-widget-vuejs
 
 3D Talking Avatar Widget - AI Assistant with real-time lip-sync animation for Vue.js 3.
+
+[![npm version](https://img.shields.io/npm/v/@liyalabs/liya-3d-avatar-widget-vuejs.svg)](https://www.npmjs.com/package/@liyalabs/liya-3d-avatar-widget-vuejs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> **[Live Demo →](https://ai.liyalabs.com)** &nbsp;|&nbsp; **[Website →](https://liyalabs.com)**
+
+## Screenshots
+
+### Widget & Avatar Modal
+
+| Widget (Chat Panel) | Avatar Modal (Lip-sync) |
+|---------------------|------------------------|
+| ![Widget Desktop](screenshots/widget-desktop.png) | ![Avatar Modal](screenshots/avatar-modal.png) |
+
+### Mobile
+
+| Mobile Widget | Mobile Avatar |
+|---------------|---------------|
+| ![Widget Mobile](screenshots/widget-mobile.png) | ![Avatar Mobile](screenshots/avatar-mobile.png) |
+
+### Avatar Lip-sync in Action
+
+| Idle | Speaking |
+|------|----------|
+| ![Avatar Idle](screenshots/avatar-idle.png) | ![Avatar Speaking](screenshots/avatar-lipsync.png) |
 
 ## Features
 
@@ -213,6 +238,20 @@ Where `{X}` is your assigned instance number (1, 2, 3, etc.).
 | 2 | `https://app-2-ai.liyalabs.com` |
 | 3 | `https://app-3-ai.liyalabs.com` |
 
+## Live Demo
+
+See the 3D avatar widget in action:
+
+- **Full Platform**: [ai.liyalabs.com](https://ai.liyalabs.com) — Create a 3D avatar assistant and interact with the talking avatar
+- **Website**: [liyalabs.com](https://liyalabs.com) — See the widget embedded on a live website
+
 ## License
 
 MIT © Liya Labs
+
+## Support
+
+- 🌐 Website: [liyalabs.com](https://liyalabs.com)
+- 📖 Documentation: [docs.liyalabs.com](https://docs.liyalabs.com)
+- 🐛 Issues: [GitHub Issues](https://github.com/liyalabs/liya-ai-chat/issues)
+- 📧 Email: support@liyalabs.com
