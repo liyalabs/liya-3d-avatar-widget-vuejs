@@ -188,8 +188,8 @@ function initScene() {
     0.1,
     1000
   )
-  camera.position.set(0, 1.5, 1.5)
-  camera.lookAt(0, 1.45, 0)
+  camera.position.set(0, 1.48, 1.5)
+  camera.lookAt(0, 1.4, 0)
 
   // Renderer - Safari/iOS optimized settings
   renderer = new THREE.WebGLRenderer({ 

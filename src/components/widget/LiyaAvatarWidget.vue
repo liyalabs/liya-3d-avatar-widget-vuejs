@@ -669,20 +669,22 @@ function updateKioskAvatarSize(): void {
   const height = window.innerHeight
   const isMobile = width <= 768
   const isSmallMobile = width <= 480
+  const msgHidden = !isMessageBoxVisible.value
   const widthFactor = isSmallMobile
-    ? (isModalKiosk.value ? 0.85 : 0.9)
+    ? (isModalKiosk.value ? 0.9 : 0.95)
     : isMobile
-      ? (isModalKiosk.value ? 0.7 : 0.8)
+      ? (isModalKiosk.value ? 0.8 : 0.9)
       : (isModalKiosk.value ? 0.42 : 0.55)
-  const heightFactor = isSmallMobile
-    ? (isModalKiosk.value ? 0.38 : 0.42)
+  const baseHeightFactor = isSmallMobile
+    ? (isModalKiosk.value ? 0.5 : 0.55)
     : isMobile
-      ? (isModalKiosk.value ? 0.42 : 0.48)
+      ? (isModalKiosk.value ? 0.55 : 0.6)
       : (isModalKiosk.value ? 0.6 : 0.68)
-  const minHeight = isMobile ? 240 : 360
+  const heightFactor = msgHidden ? baseHeightFactor + 0.18 : baseHeightFactor
+  const minHeight = isMobile ? 280 : 360
   // Removed max limits to allow larger avatars on big screens (27"+)
   kioskAvatarSize.value = {
-    width: Math.max(width * widthFactor, 280),
+    width: Math.max(width * widthFactor, 300),
     height: Math.max(height * heightFactor, minHeight),
   }
 }
@@ -1001,6 +1003,12 @@ onMounted(async () => {
   updateKioskAvatarSize()
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', updateKioskAvatarSize)
+  }
+})
+
+watch(isMessageBoxVisible, () => {
+  if (isKioskLayout.value) {
+    updateKioskAvatarSize()
   }
 })
 </script>
@@ -1475,21 +1483,6 @@ onMounted(async () => {
           </div>
 
           <div class="liya-3d-avatar-widget-vuejs-kiosk__controls">
-            <!-- Message Box Toggle Button -->
-            <button 
-              class="liya-3d-avatar-widget-vuejs-kiosk__toggle-msg-btn"
-              @click="isMessageBoxVisible = !isMessageBoxVisible"
-              :title="isMessageBoxVisible ? t.kiosk.hideMessages : t.kiosk.showMessages"
-            >
-              <!-- Eye icon (visible) -->
-              <svg v-if="isMessageBoxVisible" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
-              </svg>
-              <!-- Eye-off icon (hidden) -->
-              <svg v-else viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46A11.804 11.804 0 0 0 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>
-              </svg>
-            </button>
             <Transition name="liya-3d-avatar-widget-vuejs-msg-toggle">
               <div v-show="isMessageBoxVisible" class="liya-3d-avatar-widget-vuejs-kiosk__messages">
               <template v-for="(message, index) in kioskMessages" :key="`kiosk-message-${index}`">
@@ -1525,6 +1518,21 @@ onMounted(async () => {
               </template>
               </div>
             </Transition>
+            <!-- Message Box Toggle Button (below chatbox) -->
+            <button 
+              class="liya-3d-avatar-widget-vuejs-kiosk__toggle-msg-btn"
+              @click="isMessageBoxVisible = !isMessageBoxVisible"
+              :title="isMessageBoxVisible ? t.kiosk.hideMessages : t.kiosk.showMessages"
+            >
+              <!-- Eye icon (visible) -->
+              <svg v-if="isMessageBoxVisible" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+              </svg>
+              <!-- Eye-off icon (hidden) -->
+              <svg v-else viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46A11.804 11.804 0 0 0 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>
+              </svg>
+            </button>
 
             <button
               v-if="showVoice"
@@ -2231,7 +2239,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   z-index: 1;
 }
 
@@ -2350,10 +2358,8 @@ onMounted(async () => {
   justify-content: center;
   padding-top: 0;
   margin: 0 auto;
-  flex: 0 0 auto;
-  height: calc(100vh - 380px);
-  min-height: 300px;
-  max-height: 480px;
+  flex: 1 1 auto;
+  min-height: 200px;
   z-index: 2;
   overflow: hidden;
 }
@@ -2672,7 +2678,7 @@ onMounted(async () => {
   }
 
   .liya-3d-avatar-widget-vuejs-kiosk__container {
-    padding: calc(32px + env(safe-area-inset-top, 0px)) 16px 28px;
+    padding: calc(48px + env(safe-area-inset-top, 0px)) 16px 24px;
   }
 
   .liya-3d-avatar-widget-vuejs-kiosk__avatar {
@@ -2940,9 +2946,6 @@ onMounted(async () => {
 
 /* Message Box Toggle Button */
 .liya-3d-avatar-widget-vuejs-kiosk__toggle-msg-btn {
-  position: absolute;
-  top: -40px;
-  right: 0;
   width: 36px;
   height: 36px;
   border: none;
@@ -2957,6 +2960,7 @@ onMounted(async () => {
   justify-content: center;
   transition: all 0.2s ease;
   z-index: 10;
+  align-self: flex-end;
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__toggle-msg-btn:hover {
@@ -3153,11 +3157,7 @@ onMounted(async () => {
   }
 
   .liya-3d-avatar-widget-vuejs-kiosk__avatar {
-    height: calc(100vh - 380px);
-    height: calc(100dvh - 380px);
-    min-height: 200px;
-    max-height: 320px;
-    margin-top: 16px;
+    min-height: 180px;
   }
   
   .liya-3d-avatar-widget-vuejs-kiosk__messages {
@@ -3191,11 +3191,7 @@ onMounted(async () => {
 
 @media (max-width: 480px) {
   .liya-3d-avatar-widget-vuejs-kiosk__avatar {
-    height: calc(100vh - 340px);
-    height: calc(100dvh - 340px);
-    min-height: 180px;
-    max-height: 260px;
-    margin-top: 12px;
+    min-height: 150px;
   }
   
   .liya-3d-avatar-widget-vuejs-kiosk__messages {
