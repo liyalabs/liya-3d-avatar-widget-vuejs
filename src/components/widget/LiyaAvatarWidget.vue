@@ -667,12 +667,23 @@ function updateKioskAvatarSize(): void {
 
   const width = window.innerWidth
   const height = window.innerHeight
-  const widthFactor = isModalKiosk.value ? 0.42 : 0.55
-  const heightFactor = isModalKiosk.value ? 0.6 : 0.68
+  const isMobile = width <= 768
+  const isSmallMobile = width <= 480
+  const widthFactor = isSmallMobile
+    ? (isModalKiosk.value ? 0.85 : 0.9)
+    : isMobile
+      ? (isModalKiosk.value ? 0.7 : 0.8)
+      : (isModalKiosk.value ? 0.42 : 0.55)
+  const heightFactor = isSmallMobile
+    ? (isModalKiosk.value ? 0.38 : 0.42)
+    : isMobile
+      ? (isModalKiosk.value ? 0.42 : 0.48)
+      : (isModalKiosk.value ? 0.6 : 0.68)
+  const minHeight = isMobile ? 240 : 360
   // Removed max limits to allow larger avatars on big screens (27"+)
   kioskAvatarSize.value = {
-    width: Math.max(width * widthFactor, 320),
-    height: Math.max(height * heightFactor, 360),
+    width: Math.max(width * widthFactor, 280),
+    height: Math.max(height * heightFactor, minHeight),
   }
 }
 
@@ -2216,7 +2227,7 @@ onMounted(async () => {
   position: relative;
   width: min(960px, 100%);
   height: 100%;
-  padding: clamp(24px, 3vh, 60px) clamp(16px, 2vw, 48px) clamp(24px, 3vh, 48px);
+  padding: calc(clamp(24px, 3vh, 60px) + env(safe-area-inset-top, 0px)) clamp(16px, 2vw, 48px) clamp(24px, 3vh, 48px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2661,7 +2672,7 @@ onMounted(async () => {
   }
 
   .liya-3d-avatar-widget-vuejs-kiosk__container {
-    padding: 32px 16px 28px;
+    padding: calc(32px + env(safe-area-inset-top, 0px)) 16px 28px;
   }
 
   .liya-3d-avatar-widget-vuejs-kiosk__avatar {
@@ -3137,11 +3148,16 @@ onMounted(async () => {
 
 /* Mobile Responsive - Kiosk Mode */
 @media (max-width: 768px) {
+  .liya-3d-avatar-widget-vuejs-kiosk__close {
+    top: calc(16px + env(safe-area-inset-top, 0px));
+  }
+
   .liya-3d-avatar-widget-vuejs-kiosk__avatar {
-    height: calc(100vh - 340px);
-    height: calc(100dvh - 340px);
-    min-height: 240px;
-    max-height: 360px;
+    height: calc(100vh - 380px);
+    height: calc(100dvh - 380px);
+    min-height: 200px;
+    max-height: 320px;
+    margin-top: 16px;
   }
   
   .liya-3d-avatar-widget-vuejs-kiosk__messages {
@@ -3175,10 +3191,11 @@ onMounted(async () => {
 
 @media (max-width: 480px) {
   .liya-3d-avatar-widget-vuejs-kiosk__avatar {
-    height: calc(100vh - 300px);
-    height: calc(100dvh - 300px);
-    min-height: 200px;
-    max-height: 280px;
+    height: calc(100vh - 340px);
+    height: calc(100dvh - 340px);
+    min-height: 180px;
+    max-height: 260px;
+    margin-top: 12px;
   }
   
   .liya-3d-avatar-widget-vuejs-kiosk__messages {
