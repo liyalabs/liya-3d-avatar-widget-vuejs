@@ -1,6 +1,6 @@
 {
   "name": "@liyalabs/liya-3d-avatar-widget-vuejs",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "3D Talking Avatar Widget for Vue.js - AI Assistant with real-time lip-sync",
   "type": "module",
   "main": "./dist/liya-3d-avatar-widget-vuejs.umd.cjs",
@@ -41,7 +41,7 @@
     "vite": "^6.2.0",
     "vite-plugin-dts": "^4.5.0",
     "vue": "^3.5.0",
-    "vue-tsc": "^2.2.0"
+    "vue-tsc": "^2.2.12"
   },
   "keywords": [
     "vue",

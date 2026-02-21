@@ -14,8 +14,9 @@
  * ==================================================
  */
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import type { Message, ParsedResponse } from '../../types'
+import { renderMarkdown } from '../../utils/markdown'
 
 interface Props {
   message: Message
@@ -36,7 +37,7 @@ const emit = defineEmits<{
 const isUser = props.message.role === 'user'
 
 // Fields to exclude from preview
-const excludedPreviewFields = ['metadata', 'source', 'sources', 'raw_response', 'id', 'created_at', 'updated_at', 'session_id', 'message_id']
+const excludedPreviewFields = ['metadata', 'source', 'sources', 'raw_response', 'id', 'created_at', 'updated_at', 'session_id', 'message_id', 'response', 'suggestions']
 
 // Check if content is JSON
 function isJsonContent(content: string | null | undefined): boolean {
@@ -153,11 +154,15 @@ const jsonData = computed(() => {
 })
 
 // Get display content - either parsed response text or original content
+// Renders markdown to HTML for assistant messages (links, bold, etc.)
 const displayContent = computed(() => {
-  if (parsedResponse.value) {
-    return parsedResponse.value.response
+  const raw = parsedResponse.value
+    ? parsedResponse.value.response
+    : props.message.content
+  if (!isUser && raw) {
+    return renderMarkdown(raw)
   }
-  return props.message.content
+  return raw
 })
 
 // Get suggestions from parsed response - convert to strings
@@ -172,6 +177,31 @@ function handleSuggestionClick(suggestion: string): void {
 
 function handleSuggestionEdit(suggestion: string): void {
   emit('suggestion-edit', suggestion)
+}
+
+const copySuccess = ref(false)
+
+async function handleCopy(): Promise<void> {
+  const text = parsedResponse.value
+    ? parsedResponse.value.response
+    : props.message.content || ''
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    copySuccess.value = true
+    setTimeout(() => { copySuccess.value = false }, 2000)
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    copySuccess.value = true
+    setTimeout(() => { copySuccess.value = false }, 2000)
+  }
 }
 
 function formatTime(dateString: string): string {
@@ -309,6 +339,23 @@ function formatTime(dateString: string): string {
         <!-- Regular text content -->
         <div v-else class="liya-3d-avatar-widget-vuejs-message__text" v-html="displayContent"></div>
       </div>
+
+      <!-- Copy button for assistant messages -->
+      <button
+        v-if="!isUser && (displayContent || hasJsonContent)"
+        class="liya-3d-avatar-widget-vuejs-message__copy"
+        :class="{ 'liya-3d-avatar-widget-vuejs-message__copy--success': copySuccess }"
+        @click="handleCopy"
+        :title="copySuccess ? 'Kopyalandı!' : 'Kopyala'"
+      >
+        <svg v-if="copySuccess" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+          <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+        </svg>
+      </button>
       
       <!-- Suggestions from parsed response -->
       <div v-if="suggestions.length > 0" class="liya-3d-avatar-widget-vuejs-message__suggestions">
@@ -439,6 +486,53 @@ function formatTime(dateString: string): string {
 .liya-3d-avatar-widget-vuejs-message__text :deep(pre code) {
   background: none;
   padding: 0;
+}
+
+.liya-3d-avatar-widget-vuejs-message__text :deep(a),
+.liya-3d-avatar-widget-vuejs-message__text :deep(.liya-3d-avatar-widget-vuejs-link) {
+  color: var(--liya-primary-color, #6366f1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+  cursor: pointer;
+}
+
+.liya-3d-avatar-widget-vuejs-message__text :deep(a:hover) {
+  opacity: 0.8;
+}
+
+.liya-3d-avatar-widget-vuejs-message--user .liya-3d-avatar-widget-vuejs-message__text :deep(a) {
+  color: white;
+}
+
+.liya-3d-avatar-widget-vuejs-message__copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--liya-text-muted, #9ca3af);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.liya-3d-avatar-widget-vuejs-message__copy:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--liya-text-color, #374151);
+}
+
+.liya-3d-avatar-widget-vuejs-message__copy:active {
+  transform: scale(0.9);
+}
+
+.liya-3d-avatar-widget-vuejs-message__copy--success {
+  color: #22c55e;
 }
 
 .liya-3d-avatar-widget-vuejs-message__meta {

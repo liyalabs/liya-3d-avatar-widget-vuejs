@@ -131,7 +131,7 @@ export class AvatarApiError extends Error {
 
 export interface UserAccessResponse {
   has_avatar_access: boolean
-  account_type: 'standard' | 'premium' | 'premium_plus' | 'system_admin'
+  account_type: 'standard' | 'premium' | 'premium_plus' | 'enterprise' | 'system_admin'
   can_use_custom_avatar: boolean
 }
 

@@ -20,6 +20,7 @@ import { useChat } from '../../composables/useChat'
 import { useVoice } from '../../composables/useVoice'
 import { getConfig } from '../../api'
 import { useI18n } from '../../i18n'
+import { stripForTTS } from '../../utils/tts'
 
 interface Props {
   isOpen: boolean
@@ -139,8 +140,17 @@ async function handleSendMessage(message: string) {
       const responseText = response.assistant_message?.content || response.response || ''
       emit('messageReceived', responseText)
       
-      // Generate avatar speech
-      await speakWithAvatar(responseText)
+      // Extract text from JSON response if needed, then strip for TTS
+      let textToSpeak = responseText
+      try {
+        const parsed = JSON.parse(responseText)
+        if (parsed.response) {
+          textToSpeak = parsed.response
+        }
+      } catch {
+        // Not JSON, use as-is
+      }
+      await speakWithAvatar(stripForTTS(textToSpeak))
     }
   } catch (error) { /* message send failed */ } finally {
     isProcessing.value = false

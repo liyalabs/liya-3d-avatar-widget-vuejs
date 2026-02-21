@@ -26,6 +26,7 @@ import { useI18n } from '../../i18n'
 import MessageList from '../shared/MessageList.vue'
 import ChatInput from '../shared/ChatInput.vue'
 import { AvatarScene } from '../avatar'
+import { stripForTTS } from '../../utils/tts'
 
 interface Props {
   position?: ThemeConfig['position']
@@ -898,7 +899,8 @@ async function handleSend(message: string, fileIds?: string[]): Promise<void> {
       } catch {
         // Not JSON, use as-is
       }
-      await speakWithAvatar(textToSpeak)
+      // Strip markdown, URLs, emojis for clean TTS speech
+      await speakWithAvatar(stripForTTS(textToSpeak))
     }
   }
   

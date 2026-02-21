@@ -126,6 +126,9 @@ export function useChat() {
       saveSessionToStorage(sessionId)
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to load history'
+      // Clear stale session so next message creates a fresh one
+      currentSessionId.value = null
+      clearSessionFromStorage()
     } finally {
       isLoading.value = false
     }

@@ -48,8 +48,31 @@ const COLOR_PRESETS: AvatarColorPreset[] = [
   { id: 'white-clean', name: 'Beyaz Sade', top: '#F8FAFC', bottom: '#E2E8F0', footwear: '#CBD5E1' }
 ]
 
-const colors = ref<AvatarColors>({ ...DEFAULT_COLORS })
-const currentPresetId = ref<string | null>('white-clean')
+// Initialize colors from localStorage immediately on module load
+function getInitialColors(): { colors: AvatarColors; presetId: string | null } {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return { colors: { ...DEFAULT_COLORS }, presetId: 'white-clean' }
+  }
+  
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      return {
+        colors: parsed.colors ? { ...DEFAULT_COLORS, ...parsed.colors } : { ...DEFAULT_COLORS },
+        presetId: parsed.presetId ?? 'white-clean'
+      }
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  
+  return { colors: { ...DEFAULT_COLORS }, presetId: 'white-clean' }
+}
+
+const initialState = getInitialColors()
+const colors = ref<AvatarColors>(initialState.colors)
+const currentPresetId = ref<string | null>(initialState.presetId)
 
 function loadFromStorage(): void {
   if (typeof window === 'undefined' || !window.localStorage) return
@@ -119,6 +142,10 @@ function init(): void {
 }
 
 export function useAvatarColors() {
+  // Always sync with localStorage when composable is used
+  // This ensures colors are up-to-date even after HMR or widget re-open
+  loadFromStorage()
+  
   return {
     // State
     colors: readonly(colors),
