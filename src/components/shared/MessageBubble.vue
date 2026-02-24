@@ -165,10 +165,12 @@ const displayContent = computed(() => {
   return raw
 })
 
-// Get suggestions from parsed response - convert to strings
+// Get suggestions from parsed response - convert to strings and deduplicate
 const suggestions = computed(() => {
   const rawSuggestions = parsedResponse.value?.suggestions || []
-  return rawSuggestions.map((s: any) => typeof s === 'object' ? JSON.stringify(s) : String(s))
+  const mapped = rawSuggestions.map((s: any) => typeof s === 'object' ? JSON.stringify(s) : String(s))
+  // Deduplicate suggestions
+  return [...new Set(mapped)]
 })
 
 function handleSuggestionClick(suggestion: string): void {

@@ -23,6 +23,7 @@ interface Props {
   isLoading?: boolean
   assistantName?: string
   welcomeMessage?: string
+  welcomeSuggestions?: string[]
   preparingText?: string
 }
 
@@ -30,6 +31,7 @@ const props = withDefaults(defineProps<Props>(), {
   isLoading: false,
   assistantName: 'Assistant',
   welcomeMessage: '',
+  welcomeSuggestions: () => [],
   preparingText: '',
 })
 
@@ -76,6 +78,16 @@ defineExpose({ scrollToBottom })
         </svg>
       </div>
       <p class="liya-3d-avatar-widget-vuejs-welcome__text">{{ welcomeMessage }}</p>
+      <div v-if="welcomeSuggestions && welcomeSuggestions.length > 0" class="liya-3d-avatar-widget-vuejs-welcome__suggestions">
+        <button
+          v-for="suggestion in welcomeSuggestions"
+          :key="suggestion"
+          class="liya-3d-avatar-widget-vuejs-welcome__suggestion-btn"
+          @click="handleSuggestionClick(suggestion)"
+        >
+          {{ suggestion }}
+        </button>
+      </div>
     </div>
 
     <!-- Messages -->
@@ -86,6 +98,21 @@ defineExpose({ scrollToBottom })
       :assistant-name="assistantName"
       @suggestion-click="handleSuggestionClick"
     />
+
+    <!-- Welcome suggestions (shown when only a welcome message exists) -->
+    <div
+      v-if="messages.length === 1 && messages[0].id?.startsWith('welcome-') && welcomeSuggestions && welcomeSuggestions.length > 0"
+      class="liya-3d-avatar-widget-vuejs-welcome__suggestions liya-3d-avatar-widget-vuejs-welcome__suggestions--inline"
+    >
+      <button
+        v-for="suggestion in welcomeSuggestions"
+        :key="suggestion"
+        class="liya-3d-avatar-widget-vuejs-welcome__suggestion-btn"
+        @click="handleSuggestionClick(suggestion)"
+      >
+        {{ suggestion }}
+      </button>
+    </div>
 
     <!-- Typing indicator -->
     <div v-if="isLoading" class="liya-3d-avatar-widget-vuejs-typing">
@@ -134,6 +161,42 @@ defineExpose({ scrollToBottom })
   font-size: 14px;
   max-width: 280px;
   line-height: 1.5;
+}
+
+.liya-3d-avatar-widget-vuejs-welcome__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  justify-content: center;
+  max-width: 360px;
+}
+
+.liya-3d-avatar-widget-vuejs-welcome__suggestion-btn {
+  padding: 8px 14px;
+  border-radius: 18px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--liya-border-color, rgba(255,255,255,0.12));
+  background: var(--liya-bg-secondary, rgba(255,255,255,0.06));
+  color: var(--liya-text-secondary, #c5d0de);
+  transition: all 0.2s ease;
+  line-height: 1.3;
+}
+
+.liya-3d-avatar-widget-vuejs-welcome__suggestion-btn:hover {
+  background: var(--liya-primary-color, #6366f1);
+  border-color: var(--liya-primary-color, #6366f1);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.liya-3d-avatar-widget-vuejs-welcome__suggestions--inline {
+  justify-content: flex-start;
+  padding: 4px 0 8px 48px;
+  max-width: 100%;
 }
 
 .liya-3d-avatar-widget-vuejs-typing {

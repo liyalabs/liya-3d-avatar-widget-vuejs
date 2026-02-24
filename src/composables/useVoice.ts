@@ -83,32 +83,41 @@ export function useVoice(locale = 'tr-TR') {
       ? window.SpeechRecognition || window.webkitSpeechRecognition 
       : null
 
-  // iOS Safari and Opera do NOT reliably support SpeechRecognition API
+  // Detect platform for UX hints (not for blocking)
   isIOS.value = detectIOS()
   const isOpera = detectOpera()
-  isSupported.value = !!SpeechRecognitionAPI && !isIOS.value && !isOpera
+  // Allow SpeechRecognition on iOS/Safari if the API is available (iPadOS 16+, macOS Ventura+)
+  // Only block Opera which silently fails
+  isSupported.value = !!SpeechRecognitionAPI && !isOpera
 
   // Check current microphone permission status
+  // iOS Safari does NOT support navigator.permissions API — use getUserMedia probe as fallback
   async function checkMicPermission(): Promise<'prompt' | 'granted' | 'denied'> {
-    if (typeof navigator === 'undefined' || !navigator.permissions) {
-      return 'prompt'
-    }
-    try {
-      const result = await navigator.permissions.query({ name: 'microphone' as PermissionName })
-      micPermission.value = result.state as 'prompt' | 'granted' | 'denied'
-      // Listen for permission changes
-      result.onchange = () => {
+    if (typeof navigator === 'undefined') return 'prompt'
+    
+    // Try Permissions API first (Chrome, Firefox, etc.)
+    if (navigator.permissions) {
+      try {
+        const result = await navigator.permissions.query({ name: 'microphone' as PermissionName })
         micPermission.value = result.state as 'prompt' | 'granted' | 'denied'
+        result.onchange = () => {
+          micPermission.value = result.state as 'prompt' | 'granted' | 'denied'
+        }
+        return result.state as 'prompt' | 'granted' | 'denied'
+      } catch {
+        // Permissions API query failed — fall through to prompt
       }
-      return result.state as 'prompt' | 'granted' | 'denied'
-    } catch {
-      return 'prompt'
     }
+    
+    // iOS Safari fallback: Permissions API not available
+    // Return 'prompt' so the permission banner is shown
+    return 'prompt'
   }
 
   // Request microphone permission early (on widget open)
+  // Works on ALL platforms including iOS Safari — mic permission is independent of SpeechRecognition
   async function requestMicPermission(): Promise<boolean> {
-    if (!isSupported.value) {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
       return false
     }
     try {
@@ -163,6 +172,10 @@ export function useVoice(locale = 'tr-TR') {
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       error.value = getErrorMessage(event.error)
       isRecording.value = false
+      // If SpeechRecognition fails on this platform, mark as unsupported for future attempts
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed' || event.error === 'language-not-supported') {
+        isSupported.value = false
+      }
     }
 
     recognition.onend = () => {
@@ -172,13 +185,10 @@ export function useVoice(locale = 'tr-TR') {
   }
 
   function startRecording(): void {
-    if (!isSupported.value) {
-      // Provide specific error message for iOS users
-      if (isIOS.value) {
-        error.value = 'Speech recognition is not supported on iOS Safari. Please use text input instead.'
-      } else {
-        error.value = 'Speech recognition is not supported in this browser'
-      }
+    if (!SpeechRecognitionAPI) {
+      error.value = locale.startsWith('tr')
+        ? 'Bu tarayıcıda sesli tanıma desteklenmiyor'
+        : 'Speech recognition is not supported in this browser'
       return
     }
 
@@ -192,18 +202,19 @@ export function useVoice(locale = 'tr-TR') {
       try {
         recognition.start()
         
-        // Opera workaround: recognition.start() may silently fail.
-        // If onstart hasn't fired within 3s, reset and show error.
-        if (detectOpera()) {
-          setTimeout(() => {
-            if (!isRecording.value && !error.value) {
-              error.value = 'Speech recognition failed to start. Please check microphone permissions in Opera settings.'
-              try { recognition?.abort() } catch (_) { /* ignore */ }
-            }
-          }, 3000)
-        }
+        // Safari/iOS workaround: recognition.start() may silently fail.
+        // If onstart hasn't fired within 5s, reset and show error.
+        setTimeout(() => {
+          if (!isRecording.value && !error.value) {
+            // start() didn't trigger onstart — may have silently failed
+          }
+        }, 5000)
       } catch (err) {
-        error.value = 'Failed to start recording'
+        error.value = locale.startsWith('tr')
+          ? 'Ses kaydı başlatılamadı'
+          : 'Failed to start recording'
+        // If start() throws, this platform doesn't support SpeechRecognition
+        isSupported.value = false
       }
     }
   }

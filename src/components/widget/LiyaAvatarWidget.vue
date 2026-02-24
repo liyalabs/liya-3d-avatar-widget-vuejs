@@ -31,6 +31,7 @@ import { stripForTTS } from '../../utils/tts'
 interface Props {
   position?: ThemeConfig['position']
   theme?: ThemeConfig
+  assistantName?: string
   welcomeMessage?: string
   welcomeSuggestions?: string[]
   placeholder?: string
@@ -53,6 +54,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   position: 'bottom-right',
+  assistantName: '',
   welcomeMessage: '',
   welcomeSuggestions: () => [],
   placeholder: '',
@@ -257,6 +259,19 @@ declare global {
   }
 }
 
+// ADIM 3.6: iOS WebView AudioContext warm-up - ilk kullanıcı etkileşiminde context'i hazırla
+function warmUpAudioOnFirstInteraction(): void {
+  if (typeof document === 'undefined') return
+  
+  const handler = () => {
+    ensureAudioContext()
+    document.removeEventListener('touchstart', handler)
+    document.removeEventListener('click', handler)
+  }
+  document.addEventListener('touchstart', handler, { once: true, passive: true })
+  document.addEventListener('click', handler, { once: true })
+}
+
 // iOS/Safari AudioContext helper - must be called after user interaction
 async function ensureAudioContext(): Promise<AudioContext | null> {
   // Check if global context exists on window and is usable
@@ -323,6 +338,7 @@ const {
   loadHistory,
   addWelcomeMessage,
   updateWelcomeMessage,
+  clearMessages,
 } = useChat()
 
 const { uploadFiles, clearAll: clearFiles } = useFileUpload()
@@ -370,7 +386,7 @@ function showVoiceNotSupportedMessage(): void {
   }, 3000)
 }
 
-const assistantName = computed(() => config.assistantName || 'Assistant')
+const assistantName = computed(() => props.assistantName || config.assistantName || 'Assistant')
 
 const isKioskMode = computed(() => props.liyaWidgetMode === 'kiosk')
 const isModalKiosk = computed(() => props.liyaWidgetMode === 'modal_kiosk')
@@ -385,17 +401,29 @@ const positionClasses = computed(() => ({
   'liya-3d-avatar-widget-vuejs-widget--top-left': props.position === 'top-left',
 }))
 
+function isDarkColor(hex: string): boolean {
+  const c = hex.replace('#', '')
+  const r = parseInt(c.substring(0, 2), 16)
+  const g = parseInt(c.substring(2, 4), 16)
+  const b = parseInt(c.substring(4, 6), 16)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance < 0.5
+}
+
 const cssVars = computed(() => {
   const theme = props.theme || {}
+  const bgColor = theme.backgroundColor || '#ffffff'
+  const dark = isDarkColor(bgColor)
   return {
     '--liya-primary-color': theme.primaryColor || '#6366f1',
     '--liya-primary-hover': theme.primaryColor ? adjustColor(theme.primaryColor, -10) : '#4f46e5',
-    '--liya-secondary-color': theme.secondaryColor || '#e5e7eb',
-    '--liya-bg-color': theme.backgroundColor || '#ffffff',
-    '--liya-bg-secondary': '#f3f4f6',
-    '--liya-text-color': theme.textColor || '#374151',
-    '--liya-text-muted': '#9ca3af',
-    '--liya-border-color': '#e5e7eb',
+    '--liya-secondary-color': theme.secondaryColor || (dark ? '#334155' : '#e5e7eb'),
+    '--liya-bg-color': bgColor,
+    '--liya-bg-secondary': dark ? 'rgba(255,255,255,0.08)' : '#f3f4f6',
+    '--liya-text-color': theme.textColor || (dark ? '#e2e8f0' : '#374151'),
+    '--liya-text-secondary': dark ? '#cbd5e1' : '#6b7280',
+    '--liya-text-muted': dark ? '#94a3b8' : '#9ca3af',
+    '--liya-border-color': dark ? 'rgba(255,255,255,0.12)' : '#e5e7eb',
     '--liya-border-radius': theme.borderRadius || '16px',
     '--liya-font-family': theme.fontFamily || 'system-ui, -apple-system, sans-serif',
     '--liya-z-index': theme.zIndex || 9999,
@@ -646,6 +674,8 @@ function closeWidget(): void {
   if (isRecording.value) {
     stopRecording()
   }
+  // Clear messages and session cache so next open starts fresh
+  clearMessages()
   isOpen.value = false
   emit('closed')
 }
@@ -966,17 +996,19 @@ onMounted(async () => {
     return
   }
   
+  // ADIM 3.6: iOS WebView AudioContext warm-up - ilk kullanıcı etkileşiminde context'i hazırla
+  warmUpAudioOnFirstInteraction()
+  
   initFromStorage()
   
   // Initialize avatar colors from localStorage
   initColors()
   
   // Request microphone permission early (before user clicks mic button)
-  if (isVoiceSupported.value) {
-    const status = await checkMicPermission()
-    if (status === 'prompt') {
-      isMicPermissionPending.value = true
-    }
+  // iOS Safari dahil tüm platformlarda mic izni kontrol et — SpeechRecognition'dan bağımsız
+  const micStatus = await checkMicPermission()
+  if (micStatus === 'prompt') {
+    isMicPermissionPending.value = true
   }
   
   // First check user access before loading anything
@@ -1265,6 +1297,7 @@ watch(isMessageBoxVisible, () => {
             :is-loading="isLoading"
             :assistant-name="assistantName"
             :welcome-message="welcomeMessageText"
+            :welcome-suggestions="welcomeSuggestionsText"
             :preparing-text="isLoading ? t.preparingMessages[preparingMessageIndex] : ''"
             @suggestion-click="handleSuggestionClick"
           />
@@ -1637,13 +1670,14 @@ watch(isMessageBoxVisible, () => {
   font-family: var(--liya-font-family);
 }
 
+/* ADIM 3.2: iOS safe area — bottom widget'lara safe area offset ekle */
 .liya-3d-avatar-widget-vuejs-widget--bottom-right {
-  bottom: var(--liya-offset-y, 20px);
+  bottom: calc(var(--liya-offset-y, 20px) + env(safe-area-inset-bottom, 0px));
   right: var(--liya-offset-x, 20px);
 }
 
 .liya-3d-avatar-widget-vuejs-widget--bottom-left {
-  bottom: var(--liya-offset-y, 20px);
+  bottom: calc(var(--liya-offset-y, 20px) + env(safe-area-inset-bottom, 0px));
   left: var(--liya-offset-x, 20px);
 }
 
@@ -1769,7 +1803,9 @@ watch(isMessageBoxVisible, () => {
   position: absolute;
   width: 380px;
   height: 600px;
+  /* ADIM 3.3: iOS 100vh fix — dvh fallback ile adres çubuğu sorununu çöz */
   max-height: calc(100vh - 100px);
+  max-height: calc(100dvh - 100px); /* iOS 15.4+ */
   background: transparent;
   border-radius: var(--liya-border-radius);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
@@ -2209,6 +2245,16 @@ watch(isMessageBoxVisible, () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* ADIM 3.2: iOS safe area padding */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  /* ADIM 3.4: iOS touch optimization */
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__content {
@@ -2652,13 +2698,16 @@ watch(isMessageBoxVisible, () => {
 @media (max-width: 480px) {
   .liya-3d-avatar-widget-vuejs-widget__panel {
     width: calc(100vw - 40px);
+    /* ADIM 3.3: iOS 100vh fix — dvh fallback */
     height: calc(100vh - 100px);
+    height: calc(100dvh - 100px); /* iOS 15.4+ */
     max-height: none;
   }
   
+  /* ADIM 3.2: iOS safe area — mobilde de safe area offset ekle */
   .liya-3d-avatar-widget-vuejs-widget--bottom-right,
   .liya-3d-avatar-widget-vuejs-widget--bottom-left {
-    bottom: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     right: 10px;
     left: 10px;
   }
