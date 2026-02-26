@@ -963,14 +963,17 @@ onUnmounted(() => {
 function applyOutfitColors(colors: { top: string; bottom: string; footwear: string }): void {
   if (outfitTopMesh?.material) {
     const mat = outfitTopMesh.material as THREE.MeshStandardMaterial
+    if (mat.map) { mat.map = null; mat.needsUpdate = true }
     mat.color.set(colors.top)
   }
   if (outfitBottomMesh?.material) {
     const mat = outfitBottomMesh.material as THREE.MeshStandardMaterial
+    if (mat.map) { mat.map = null; mat.needsUpdate = true }
     mat.color.set(colors.bottom)
   }
   if (outfitFootwearMesh?.material) {
     const mat = outfitFootwearMesh.material as THREE.MeshStandardMaterial
+    if (mat.map) { mat.map = null; mat.needsUpdate = true }
     mat.color.set(colors.footwear)
   }
 }
