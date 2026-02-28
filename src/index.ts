@@ -44,7 +44,13 @@ export {
   sendMessage,
   getSessionHistory,
   uploadFile,
+  getTaskStatus,
+  pollTaskStatus,
+  createTaskPoller,
 } from './api'
+
+// Task Types
+export type { TaskStatus, TaskStatusResponse } from './api'
 
 // Types
 export type {

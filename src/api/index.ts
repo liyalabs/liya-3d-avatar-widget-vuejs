@@ -21,3 +21,5 @@ export { uploadFile, formatFileSize, isValidFileType, DEFAULT_ALLOWED_FILE_TYPES
 export { getAssistants, getAssistant } from './assistants'
 export { generateAvatarSpeech, textToSpeech, decodeAudioBase64, getAvatarModel, checkUserAccess } from './avatar'
 export type { VisemeData, AvatarSpeechResponse, TextToSpeechOptions, AvatarModelResponse, UserAccessResponse } from './avatar'
+export { getTaskStatus, pollTaskStatus, createTaskPoller } from './tasks'
+export type { TaskStatus, TaskStatusResponse } from './tasks'
