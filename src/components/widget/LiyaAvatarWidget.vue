@@ -83,6 +83,7 @@ const emit = defineEmits<{
   closed: []
   messageSent: [message: string]
   messageReceived: [message: string]
+  searchResults: [data: { annotations: any[]; response: string; sessionId: string }]
   avatarOpened: []
   avatarClosed: []
 }>()
@@ -916,6 +917,15 @@ async function handleSend(message: string, fileIds?: string[]): Promise<void> {
   if (response?.assistant_message?.content || response?.response) {
     const responseText = response.assistant_message?.content || response.response || ''
     emit('messageReceived', responseText)
+    
+    // Emit search results if annotations are present (web search citations)
+    if (response.annotations && response.annotations.length > 0) {
+      emit('searchResults', {
+        annotations: response.annotations,
+        response: responseText,
+        sessionId: response.session_id
+      })
+    }
     
     // Auto-speak response if avatar is visible and autoSpeak is enabled
     if (props.autoSpeak && isAvatarVisible.value) {

@@ -144,6 +144,22 @@ export interface SendMessageRequest {
   file_ids?: string[]
 }
 
+export interface UrlCitationAnnotation {
+  type: 'url_citation'
+  url: string
+  title: string
+  start_index: number
+  end_index: number
+}
+
+export interface FileCitationAnnotation {
+  type: 'file_citation'
+  file_id: string
+  index: number
+}
+
+export type Annotation = UrlCitationAnnotation | FileCitationAnnotation
+
 export interface SendMessageResponse {
   session_id: string
   message_id?: string
@@ -154,6 +170,7 @@ export interface SendMessageResponse {
   suggestions?: string[]
   metadata?: Record<string, any>
   presentation_result?: Record<string, any>
+  annotations?: Annotation[]
 }
 
 export interface SessionHistoryResponse {
