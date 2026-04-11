@@ -32,9 +32,67 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'suggestion-click', suggestion: string): void
   (e: 'suggestion-edit', suggestion: string): void
+  (e: 'media-click', media: { type: 'image' | 'video'; url: string; alt: string }): void
 }>()
 
 const isUser = props.message.role === 'user'
+
+// Media loading states
+const mediaLoadStates = ref<Record<string, string>>({})
+
+// Media item interface
+interface MediaItem {
+  type: 'image' | 'video'
+  url: string
+  alt: string
+}
+
+// Extract images from content or backend media array
+function extractImages(): MediaItem[] {
+  // Backend media dizisi varsa onu kullan (daha güvenilir)
+  if (props.message.media && Array.isArray(props.message.media)) {
+    return props.message.media
+      .filter((m: any) => m.type === 'image')
+      .map((m: any) => ({ type: 'image' as const, url: m.url, alt: m.alt || 'Görsel' }))
+  }
+  // Fallback: Markdown'dan parse
+  const content = props.message.content || ''
+  const regex = /!\[([^\]]*)\]\(([^)]+)\)/g
+  const images: MediaItem[] = []
+  let match
+  while ((match = regex.exec(content)) !== null) {
+    images.push({ type: 'image', url: match[2], alt: match[1] || 'Görsel' })
+  }
+  return images
+}
+
+// Extract videos from content or backend media array
+function extractVideos(): MediaItem[] {
+  // Backend media dizisi varsa onu kullan (daha güvenilir)
+  if (props.message.media && Array.isArray(props.message.media)) {
+    return props.message.media
+      .filter((m: any) => m.type === 'video')
+      .map((m: any) => ({ type: 'video' as const, url: m.url, alt: m.alt || 'Video' }))
+  }
+  // Fallback: Markdown'dan parse
+  const content = props.message.content || ''
+  const regex = /\[([^\]]*)\]\((https?:\/\/[^)]+\.(?:mp4|webm|mov|MP4|WEBM|MOV))\)/g
+  const videos: MediaItem[] = []
+  let match
+  while ((match = regex.exec(content)) !== null) {
+    videos.push({ type: 'video', url: match[2], alt: match[1] || 'Video' })
+  }
+  return videos
+}
+
+// Computed media items
+const mediaImages = computed(() => extractImages())
+const mediaVideos = computed(() => extractVideos())
+
+// Handle media click
+function handleMediaClick(media: MediaItem): void {
+  emit('media-click', media)
+}
 
 // Fields to exclude from preview
 const excludedPreviewFields = ['metadata', 'source', 'sources', 'raw_response', 'id', 'created_at', 'updated_at', 'session_id', 'message_id', 'response', 'suggestions']
@@ -340,6 +398,68 @@ function formatTime(dateString: string): string {
         
         <!-- Regular text content -->
         <div v-else class="liya-3d-avatar-widget-vuejs-message__text" v-html="displayContent"></div>
+
+        <!-- Image thumbnails -->
+        <div
+          v-for="img in mediaImages"
+          :key="img.url"
+          class="liya-3d-avatar-widget-vuejs-media-thumbnail"
+          @click="handleMediaClick(img)"
+        >
+          <div
+            v-if="!mediaLoadStates[img.url] || mediaLoadStates[img.url] === 'loading'"
+            class="liya-3d-avatar-widget-vuejs-media-skeleton"
+          >
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21,15 16,10 5,21"/>
+            </svg>
+          </div>
+          <img
+            :src="img.url"
+            :alt="img.alt"
+            crossorigin="anonymous"
+            class="liya-3d-avatar-widget-vuejs-media-img"
+            :class="{ 'liya-3d-avatar-widget-vuejs-media-img--hidden': mediaLoadStates[img.url] !== 'loaded' }"
+            loading="lazy"
+            @load="mediaLoadStates[img.url] = 'loaded'"
+            @error="mediaLoadStates[img.url] = 'error'"
+          />
+          <div v-if="mediaLoadStates[img.url] === 'loaded'" class="liya-3d-avatar-widget-vuejs-media-hint">
+            🖼 Tıkla — büyüt
+          </div>
+          <div v-if="mediaLoadStates[img.url] === 'error'" class="liya-3d-avatar-widget-vuejs-media-error">
+            ⚠️ Görsel yüklenemedi
+          </div>
+        </div>
+
+        <!-- Video thumbnails -->
+        <div
+          v-for="vid in mediaVideos"
+          :key="vid.url"
+          class="liya-3d-avatar-widget-vuejs-media-thumbnail"
+          @click="handleMediaClick(vid)"
+        >
+          <div class="liya-3d-avatar-widget-vuejs-video-container">
+            <video
+              :src="vid.url + '#t=0.001'"
+              preload="metadata"
+              muted
+              playsinline
+              webkit-playsinline
+              class="liya-3d-avatar-widget-vuejs-video-thumb"
+              @loadeddata="mediaLoadStates[vid.url] = 'loaded'"
+              @error="mediaLoadStates[vid.url] = 'error'"
+            />
+            <div class="liya-3d-avatar-widget-vuejs-video-overlay">
+              <div class="liya-3d-avatar-widget-vuejs-video-play-btn">▶</div>
+            </div>
+          </div>
+          <div class="liya-3d-avatar-widget-vuejs-media-hint">
+            🎬 Tıkla — izle
+          </div>
+        </div>
       </div>
 
       <!-- Copy button for assistant messages -->
@@ -738,5 +858,100 @@ function formatTime(dateString: string): string {
 .liya-3d-avatar-widget-vuejs-edit-btn:hover {
   background: rgba(99, 102, 241, 0.1);
   color: var(--liya-primary-color, #6366f1);
+}
+
+/* Media Styles */
+.liya-3d-avatar-widget-vuejs-media-thumbnail {
+  position: relative;
+  display: inline-block;
+  margin-top: 8px;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--liya-border-color, #e5e7eb);
+  max-width: 100%;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.liya-3d-avatar-widget-vuejs-media-thumbnail:hover {
+  transform: scale(1.01);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.liya-3d-avatar-widget-vuejs-media-skeleton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 200px;
+  height: 140px;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.liya-3d-avatar-widget-vuejs-media-img {
+  display: block;
+  max-width: 240px;
+  max-height: 240px;
+  width: auto;
+  height: auto;
+  border-radius: 10px;
+}
+
+.liya-3d-avatar-widget-vuejs-media-img--hidden {
+  display: none;
+}
+
+.liya-3d-avatar-widget-vuejs-media-hint {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.45);
+  color: white;
+  font-size: 11px;
+  text-align: center;
+}
+
+.liya-3d-avatar-widget-vuejs-media-error {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #ef4444;
+}
+
+.liya-3d-avatar-widget-vuejs-video-container {
+  position: relative;
+  width: 240px;
+  max-height: 160px;
+  overflow: hidden;
+}
+
+.liya-3d-avatar-widget-vuejs-video-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 160px;
+  object-fit: cover;
+}
+
+.liya-3d-avatar-widget-vuejs-video-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.liya-3d-avatar-widget-vuejs-video-play-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #111;
 }
 </style>

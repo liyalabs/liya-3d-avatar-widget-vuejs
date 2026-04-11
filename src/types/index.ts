@@ -114,6 +114,13 @@ export interface CreateSessionRequest {
 
 export type MessageRole = 'user' | 'assistant'
 
+export interface MessageMediaItem {
+  type: 'image' | 'video'
+  url: string
+  alt?: string
+  source?: string
+}
+
 export interface Message {
   id: string
   content: string
@@ -122,6 +129,7 @@ export interface Message {
   response_time?: number
   attachments?: readonly FileAttachment[]
   raw_response?: string
+  media?: readonly MessageMediaItem[]
 }
 
 // Parsed JSON response structure from AI
@@ -171,6 +179,7 @@ export interface SendMessageResponse {
   metadata?: Record<string, any>
   presentation_result?: Record<string, any>
   annotations?: Annotation[]
+  media?: MessageMediaItem[]
 }
 
 export interface SessionHistoryResponse {

@@ -1,6 +1,6 @@
 {
   "name": "@liyalabs/liya-3d-avatar-widget-vuejs",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "3D Talking Avatar Widget for Vue.js - AI Assistant with real-time lip-sync",
   "type": "module",
   "main": "./dist/liya-3d-avatar-widget-vuejs.umd.cjs",
@@ -62,10 +62,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/liyalabs/liya-ai-chat"
+    "url": "https://github.com/liyalabs/liya-3d-avatar-widget-vuejs"
   },
   "bugs": {
-    "url": "https://github.com/liyalabs/liya-ai-chat/issues"
+    "url": "https://github.com/liyalabs/liya-3d-avatar-widget-vuejs/issues"
   },
-  "homepage": "https://liyalabs.com"
+  "homepage": "https://ai.liyalabs.com/developer"
 }

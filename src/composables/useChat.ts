@@ -85,6 +85,9 @@ export function useChat() {
             })
           }
         }
+        if (response.media && response.media.length > 0) {
+          response.assistant_message.media = response.media as any
+        }
         messages.value.push(response.assistant_message)
       } else if (response.response) {
         // Build message content: if suggestions exist, wrap as JSON for frontend parsing
@@ -101,6 +104,7 @@ export function useChat() {
           role: 'assistant',
           created_at: new Date().toISOString(),
           response_time: response.response_time,
+          media: response.media,
         })
       }
 

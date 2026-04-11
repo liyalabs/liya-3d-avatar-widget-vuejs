@@ -14,7 +14,7 @@
  * ==================================================
  */
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import type { ThemeConfig, LiyaWidgetMode } from '../../types'
 import { useChat } from '../../composables/useChat'
 import { useFileUpload } from '../../composables/useFileUpload'
@@ -477,6 +477,27 @@ const kioskMessages = computed(() => {
   return mappedMessages
 })
 
+// Kiosk messages container ref — used to scroll to bottom when new messages arrive
+const kioskMessagesRef = ref<HTMLElement | null>(null)
+// Kiosk controls ref — used to measure actual height for avatar canvas sizing
+const kioskControlsRef = ref<HTMLElement | null>(null)
+
+function scrollKioskMessagesToBottom(): void {
+  nextTick(() => {
+    if (kioskMessagesRef.value) {
+      kioskMessagesRef.value.scrollTop = kioskMessagesRef.value.scrollHeight
+    }
+  })
+}
+
+watch(kioskMessages, () => {
+  scrollKioskMessagesToBottom()
+  // Recalculate avatar canvas after messages expand/contract the controls area
+  if (isKioskLayout.value) {
+    nextTick(() => updateKioskAvatarSize())
+  }
+})
+
 // Handle kiosk suggestion click
 function handleKioskSuggestionClick(suggestion: string): void {
   handleSend(suggestion)
@@ -701,23 +722,45 @@ function updateKioskAvatarSize(): void {
   const height = window.innerHeight
   const isMobile = width <= 768
   const isSmallMobile = width <= 480
-  const msgHidden = !isMessageBoxVisible.value
+
+  // Effective container max-width — must mirror the CSS constraints for each mode
+  // kiosk: min(960px, 100%)   modal_kiosk: min(50vw, 860px)
+  const containerMaxW = isModalKiosk.value
+    ? Math.min(width * 0.5, 860)
+    : Math.min(width, 960)
+
   const widthFactor = isSmallMobile
     ? (isModalKiosk.value ? 0.9 : 0.95)
     : isMobile
       ? (isModalKiosk.value ? 0.8 : 0.9)
       : (isModalKiosk.value ? 0.42 : 0.55)
-  const baseHeightFactor = isSmallMobile
-    ? (isModalKiosk.value ? 0.5 : 0.55)
-    : isMobile
-      ? (isModalKiosk.value ? 0.55 : 0.6)
-      : (isModalKiosk.value ? 0.6 : 0.68)
-  const heightFactor = msgHidden ? baseHeightFactor + 0.18 : baseHeightFactor
+
+  // Measure actual controls height from DOM; fall back to estimates if ref not yet mounted
+  const controlsHeight = kioskControlsRef.value
+    ? kioskControlsRef.value.getBoundingClientRect().height
+    : isMessageBoxVisible.value
+      ? (isMobile ? 280 : 420)
+      : (isMobile ? 140 : 170)
+
+  // Container vertical padding (mirrors CSS padding-top / padding-bottom on __container)
+  const containerPadTop = Math.min(Math.max(height * 0.03, 24), 60)
+  const containerPadBot = Math.min(Math.max(height * 0.03, 24), 48)
+  const avatarControlsGap = 16 // gap between avatar and controls sections
+
+  // Available height for the avatar section = viewport − container pads − controls − gap
+  const availableAvatarH = height - containerPadTop - containerPadBot - controlsHeight - avatarControlsGap
+
   const minHeight = isMobile ? 280 : 360
-  // Removed max limits to allow larger avatars on big screens (27"+)
+  // Never let canvas exceed 75 % of the viewport or 1100 px on very tall screens
+  const canvasHeight = Math.max(Math.min(availableAvatarH, height * 0.75, 1100), minHeight)
+
+  // Cap canvas width to the effective container width so large/4K screens don't
+  // render an oversized Three.js canvas that overflows the container.
+  const canvasWidth = Math.min(containerMaxW * widthFactor, containerMaxW)
+
   kioskAvatarSize.value = {
-    width: Math.max(width * widthFactor, 300),
-    height: Math.max(height * heightFactor, minHeight),
+    width: Math.max(canvasWidth, 300),
+    height: canvasHeight,
   }
 }
 
@@ -1527,9 +1570,9 @@ watch(isMessageBoxVisible, () => {
             </Transition>
           </div>
 
-          <div class="liya-3d-avatar-widget-vuejs-kiosk__controls">
+          <div ref="kioskControlsRef" class="liya-3d-avatar-widget-vuejs-kiosk__controls">
             <Transition name="liya-3d-avatar-widget-vuejs-msg-toggle">
-              <div v-show="isMessageBoxVisible" class="liya-3d-avatar-widget-vuejs-kiosk__messages">
+              <div v-show="isMessageBoxVisible" ref="kioskMessagesRef" class="liya-3d-avatar-widget-vuejs-kiosk__messages">
               <template v-for="(message, index) in kioskMessages" :key="`kiosk-message-${index}`">
                 <!-- User message: show content -->
                 <p
@@ -2418,6 +2461,8 @@ watch(isMessageBoxVisible, () => {
   margin: 0 auto;
   flex: 1 1 auto;
   min-height: 200px;
+  /* Prevent the avatar section from growing excessively on tall viewports */
+  max-height: clamp(400px, 75vh, 1100px);
   z-index: 2;
   overflow: hidden;
 }
@@ -2527,24 +2572,35 @@ watch(isMessageBoxVisible, () => {
 
 .liya-3d-avatar-widget-vuejs-kiosk__messages {
   width: clamp(320px, 40vw, 720px);
-  height: clamp(140px, 18vh, 300px);
-  max-height: clamp(140px, 18vh, 300px);
+  /* Use max-height only (no fixed height) so short content doesn't create empty space */
+  max-height: clamp(160px, 22vh, 320px);
   background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 
+  box-shadow:
     0 20px 50px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   border-radius: 20px;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  /* flex-start + JS scroll-to-bottom: ensures padding-bottom is respected when overflowing */
+  justify-content: flex-start;
   gap: 8px;
   backdrop-filter: blur(20px);
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
   z-index: 1;
+  /* Ensure bottom padding is respected during scroll */
+  scroll-padding-bottom: 14px;
+}
+
+/* Spacer that guarantees bottom breathing room even under overflow */
+.liya-3d-avatar-widget-vuejs-kiosk__messages::after {
+  content: '';
+  display: block;
+  min-height: 6px;
+  flex-shrink: 0;
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__message {
@@ -2747,27 +2803,104 @@ watch(isMessageBoxVisible, () => {
   }
 }
 
-/* Large screen optimizations (27"+ monitors) */
+/* Large screen optimizations (27"+ / 1080p+ monitors) */
 @media (min-width: 1920px) {
+  .liya-3d-avatar-widget-vuejs-kiosk__container {
+    width: min(1280px, 92%);
+  }
+
+  .liya-3d-avatar-widget-vuejs-kiosk--modal .liya-3d-avatar-widget-vuejs-kiosk__container {
+    width: min(55vw, 1100px);
+  }
+
   .liya-3d-avatar-widget-vuejs-kiosk__messages {
+    width: clamp(480px, 50vw, 1000px);
+    max-height: clamp(160px, 20vh, 380px);
     font-size: 15px;
     border-radius: 24px;
     padding: 18px 20px;
+    gap: 10px;
   }
-  
+
+  .liya-3d-avatar-widget-vuejs-kiosk__message {
+    font-size: 15px;
+    padding: 12px 16px;
+  }
+
   .liya-3d-avatar-widget-vuejs-kiosk__mic {
     width: 84px;
     height: 84px;
   }
-  
+
+  .liya-3d-avatar-widget-vuejs-kiosk__hint {
+    font-size: 14px;
+  }
+
   .liya-3d-avatar-widget-vuejs-kiosk__suggestion-btn {
     font-size: 14px;
     padding: 10px 18px;
   }
-  
+
+  .liya-3d-avatar-widget-vuejs-kiosk__avatar {
+    max-height: clamp(500px, 72vh, 1100px);
+  }
+}
+
+/* 4K / UHD screens (TV / large display) */
+@media (min-width: 2560px) {
+  .liya-3d-avatar-widget-vuejs-kiosk__container {
+    width: min(1600px, 88%);
+  }
+
+  .liya-3d-avatar-widget-vuejs-kiosk--modal .liya-3d-avatar-widget-vuejs-kiosk__container {
+    width: min(58vw, 1400px);
+  }
+
+  .liya-3d-avatar-widget-vuejs-kiosk__messages {
+    width: clamp(560px, 48vw, 1200px);
+    max-height: clamp(180px, 20vh, 460px);
+    font-size: 18px;
+    border-radius: 28px;
+    padding: 22px 26px;
+    gap: 12px;
+  }
+
   .liya-3d-avatar-widget-vuejs-kiosk__message {
+    font-size: 18px;
+    padding: 14px 20px;
+    border-radius: 16px;
+  }
+
+  .liya-3d-avatar-widget-vuejs-kiosk__mic {
+    width: 104px;
+    height: 104px;
+  }
+
+  .liya-3d-avatar-widget-vuejs-kiosk__hint {
+    font-size: 17px;
+  }
+
+  .liya-3d-avatar-widget-vuejs-kiosk__suggestion-btn {
+    font-size: 16px;
+    padding: 12px 22px;
+    border-radius: 24px;
+  }
+
+  .liya-3d-avatar-widget-vuejs-kiosk__status {
+    padding: 10px 18px;
+  }
+
+  .liya-3d-avatar-widget-vuejs-kiosk__status-text {
     font-size: 15px;
-    padding: 12px 16px;
+  }
+
+  .liya-3d-avatar-widget-vuejs-kiosk__avatar {
+    max-height: clamp(560px, 70vh, 1200px);
+  }
+
+  .liya-3d-avatar-widget-vuejs-kiosk__controls {
+    gap: 24px;
+    padding-bottom: 40px;
   }
 }
 
@@ -3223,8 +3356,7 @@ watch(isMessageBoxVisible, () => {
   
   .liya-3d-avatar-widget-vuejs-kiosk__messages {
     width: clamp(280px, 85vw, 720px);
-    height: clamp(120px, 16vh, 240px);
-    max-height: clamp(120px, 16vh, 240px);
+    max-height: clamp(120px, 18vh, 260px);
     padding: 12px 14px;
   }
   
@@ -3257,8 +3389,7 @@ watch(isMessageBoxVisible, () => {
   
   .liya-3d-avatar-widget-vuejs-kiosk__messages {
     width: clamp(260px, 92vw, 720px);
-    height: clamp(100px, 14vh, 200px);
-    max-height: clamp(100px, 14vh, 200px);
+    max-height: clamp(100px, 16vh, 220px);
     padding: 10px 12px;
     border-radius: 16px;
   }
