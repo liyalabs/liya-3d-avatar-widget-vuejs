@@ -753,13 +753,15 @@ function updateKioskAvatarSize(): void {
       : Math.min(width, 960))
 
   const chatboxHidden = !isMessageBoxVisible.value
+  // Wider widthFactor when chatbox is visible: arms need to extend past the
+  // chatbox edges (chatbox is ~40vw wide, capped at ~720px scaled).
   const widthFactor = isSmallMobile
-    ? (isModalKiosk.value ? 0.9 : 0.95)
+    ? (isModalKiosk.value ? 0.95 : 0.98)
     : isMobile
-      ? (isModalKiosk.value ? 0.8 : 0.9)
+      ? (isModalKiosk.value ? 0.85 : 0.92)
       : chatboxHidden
-        ? 0.75
-        : (isModalKiosk.value ? 0.42 : 0.55)
+        ? 0.85
+        : (isModalKiosk.value ? 0.7 : 0.85)
 
   // Controls are position:absolute — they don't consume layout height.
   // Canvas fills the full container height so arms appear behind the chatbox overlay.
@@ -770,11 +772,11 @@ function updateKioskAvatarSize(): void {
   const availableAvatarH = height - containerPadTop - containerPadBot
 
   const minHeight = isMobile ? 280 : width >= 3840 ? 640 : width >= 2560 ? 480 : 360
-  // Height cap scales with resolution. No vh cap — canvas fills the full
-  // kiosk__avatar section so the avatar isn't pushed down by empty space
-  // above the canvas (controls are absolutely positioned).
-  const maxCanvasHeight = width >= 3840 ? 2400 : width >= 2560 ? 1800 : 1400
-  const canvasHeight = Math.max(Math.min(availableAvatarH, maxCanvasHeight), minHeight)
+  // Canvas always fills the full available avatar height — no max cap.
+  // The avatar div takes the full container height (controls are absolute),
+  // so canvas should match it exactly to avoid empty space at the top
+  // (which pushes the avatar's head down out of view).
+  const canvasHeight = Math.max(availableAvatarH, minHeight)
 
   // Cap canvas width to the effective container width
   const canvasWidth = Math.min(containerMaxW * widthFactor, containerMaxW)
