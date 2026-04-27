@@ -130,6 +130,17 @@ const isMessageBoxVisible = ref(true)
 // Settings panel visibility state
 const isSettingsPanelOpen = ref(false)
 
+// Resolution-aware UI scale factor
+// 1.0 = 1080p baseline, 1.25 = 2K/QHD, 1.7 = 4K/UHD
+const uiScale = ref(1.0)
+
+function computeUiScale(): number {
+  const w = typeof window !== 'undefined' ? window.innerWidth : 1920
+  if (w >= 3840) return 1.7
+  if (w >= 2560) return 1.25
+  return 1.0
+}
+
 // Avatar colors composable
 const { colors: avatarColors, presets: colorPresets, currentPresetId, setPreset, setColor, reset: resetColors, init: initColors } = useAvatarColors()
 
@@ -430,6 +441,7 @@ const cssVars = computed(() => {
     '--liya-z-index': theme.zIndex || 9999,
     '--liya-offset-x': `${props.offsetX}px`,
     '--liya-offset-y': `${props.offsetY}px`,
+    '--liya-ui-scale': String(uiScale.value),
   }
 })
 
@@ -718,44 +730,51 @@ function toggleWidget(): void {
 function updateKioskAvatarSize(): void {
   if (typeof window === 'undefined') return
 
+  // Update reactive scale so cssVars / CSS custom property stays in sync
+  uiScale.value = computeUiScale()
+
   const width = window.innerWidth
   const height = window.innerHeight
   const isMobile = width <= 768
   const isSmallMobile = width <= 480
+  const s = uiScale.value
 
-  // Effective container max-width — must mirror the CSS constraints for each mode
-  // kiosk: min(960px, 100%)   modal_kiosk: min(50vw, 860px)
+  // Effective container max-width — mirrors CSS constraints per breakpoint
+  // kiosk:       base min(960,100%) → 1280@1920 → 1600@2560 → 2000@3840
+  // modal_kiosk: base min(50vw,860) → min(55vw,1100)@1920 → min(58vw,1400)@2560 → min(50vw,1920)@3840
   const containerMaxW = isModalKiosk.value
-    ? Math.min(width * 0.5, 860)
-    : Math.min(width, 960)
+    ? (width >= 3840 ? Math.min(width * 0.50, 1920)
+      : width >= 2560 ? Math.min(width * 0.58, 1400)
+      : width >= 1920 ? Math.min(width * 0.55, 1100)
+      : Math.min(width * 0.5, 860))
+    : (width >= 3840 ? Math.min(width * 0.88, 2000)
+      : width >= 2560 ? Math.min(width * 0.88, 1600)
+      : width >= 1920 ? Math.min(width * 0.92, 1280)
+      : Math.min(width, 960))
 
+  const chatboxHidden = !isMessageBoxVisible.value
   const widthFactor = isSmallMobile
     ? (isModalKiosk.value ? 0.9 : 0.95)
     : isMobile
       ? (isModalKiosk.value ? 0.8 : 0.9)
-      : (isModalKiosk.value ? 0.42 : 0.55)
+      : chatboxHidden
+        ? 0.75
+        : (isModalKiosk.value ? 0.42 : 0.55)
 
-  // Measure actual controls height from DOM; fall back to estimates if ref not yet mounted
-  const controlsHeight = kioskControlsRef.value
-    ? kioskControlsRef.value.getBoundingClientRect().height
-    : isMessageBoxVisible.value
-      ? (isMobile ? 280 : 420)
-      : (isMobile ? 140 : 170)
-
-  // Container vertical padding (mirrors CSS padding-top / padding-bottom on __container)
+  // Controls are position:absolute — they don't consume layout height.
+  // Canvas fills the full container height so arms appear behind the chatbox overlay.
   const containerPadTop = Math.min(Math.max(height * 0.03, 24), 60)
   const containerPadBot = Math.min(Math.max(height * 0.03, 24), 48)
-  const avatarControlsGap = 16 // gap between avatar and controls sections
 
-  // Available height for the avatar section = viewport − container pads − controls − gap
-  const availableAvatarH = height - containerPadTop - containerPadBot - controlsHeight - avatarControlsGap
+  // Available height = full viewport minus container padding only
+  const availableAvatarH = height - containerPadTop - containerPadBot
 
-  const minHeight = isMobile ? 280 : 360
-  // Never let canvas exceed 75 % of the viewport or 1100 px on very tall screens
-  const canvasHeight = Math.max(Math.min(availableAvatarH, height * 0.75, 1100), minHeight)
+  const minHeight = isMobile ? 280 : width >= 3840 ? 640 : width >= 2560 ? 480 : 360
+  // Height cap scales with resolution: 1100 → 1500@2K → 2000@4K
+  const maxCanvasHeight = width >= 3840 ? 2000 : width >= 2560 ? 1500 : 1100
+  const canvasHeight = Math.max(Math.min(availableAvatarH, height * 0.75, maxCanvasHeight), minHeight)
 
-  // Cap canvas width to the effective container width so large/4K screens don't
-  // render an oversized Three.js canvas that overflows the container.
+  // Cap canvas width to the effective container width
   const canvasWidth = Math.min(containerMaxW * widthFactor, containerMaxW)
 
   kioskAvatarSize.value = {
@@ -1093,11 +1112,11 @@ onMounted(async () => {
   }
 })
 
-watch(isMessageBoxVisible, () => {
+function onMsgBoxTransitionDone(): void {
   if (isKioskLayout.value) {
     updateKioskAvatarSize()
   }
-})
+}
 </script>
 
 <template>
@@ -1571,7 +1590,11 @@ watch(isMessageBoxVisible, () => {
           </div>
 
           <div ref="kioskControlsRef" class="liya-3d-avatar-widget-vuejs-kiosk__controls">
-            <Transition name="liya-3d-avatar-widget-vuejs-msg-toggle">
+            <Transition
+              name="liya-3d-avatar-widget-vuejs-msg-toggle"
+              @after-leave="onMsgBoxTransitionDone"
+              @after-enter="onMsgBoxTransitionDone"
+            >
               <div v-show="isMessageBoxVisible" ref="kioskMessagesRef" class="liya-3d-avatar-widget-vuejs-kiosk__messages">
               <template v-for="(message, index) in kioskMessages" :key="`kiosk-message-${index}`">
                 <!-- User message: show content -->
@@ -2461,10 +2484,10 @@ watch(isMessageBoxVisible, () => {
   margin: 0 auto;
   flex: 1 1 auto;
   min-height: 200px;
-  /* Prevent the avatar section from growing excessively on tall viewports */
-  max-height: clamp(400px, 75vh, 1100px);
+  /* No max-height cap — let canvas fill full container height so arms
+     are visible behind the controls overlay */
   z-index: 2;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Floating Status Indicator */
@@ -2475,19 +2498,19 @@ watch(isMessageBoxVisible, () => {
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
+  gap: calc(8px * var(--liya-ui-scale, 1));
+  padding: calc(8px * var(--liya-ui-scale, 1)) calc(14px * var(--liya-ui-scale, 1));
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 24px;
+  border-radius: calc(24px * var(--liya-ui-scale, 1));
   z-index: 10;
   transition: all 0.3s ease;
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__status-dot {
-  width: 8px;
-  height: 8px;
+  width: calc(8px * var(--liya-ui-scale, 1));
+  height: calc(8px * var(--liya-ui-scale, 1));
   border-radius: 50%;
   background: #9ca3af;
   transition: all 0.3s ease;
@@ -2518,7 +2541,7 @@ watch(isMessageBoxVisible, () => {
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__status-text {
-  font-size: 13px;
+  font-size: calc(13px * var(--liya-ui-scale, 1));
   font-weight: 500;
   color: rgba(255, 255, 255, 0.9);
   white-space: nowrap;
@@ -2528,10 +2551,10 @@ watch(isMessageBoxVisible, () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: calc(24px * var(--liya-ui-scale, 1));
+  height: calc(24px * var(--liya-ui-scale, 1));
   padding: 0;
-  margin-left: 4px;
+  margin-left: calc(4px * var(--liya-ui-scale, 1));
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
@@ -2548,12 +2571,12 @@ watch(isMessageBoxVisible, () => {
 
 .liya-3d-avatar-widget-vuejs-kiosk__lang-btn {
   width: auto;
-  padding: 0 8px;
-  border-radius: 12px;
+  padding: 0 calc(8px * var(--liya-ui-scale, 1));
+  border-radius: calc(12px * var(--liya-ui-scale, 1));
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__lang-text {
-  font-size: 10px;
+  font-size: calc(10px * var(--liya-ui-scale, 1));
   font-weight: 600;
   letter-spacing: 0.5px;
 }
@@ -2563,36 +2586,39 @@ watch(isMessageBoxVisible, () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
-  padding-bottom: 24px;
-  flex-shrink: 0;
-  position: relative;
+  gap: calc(18px * var(--liya-ui-scale, 1));
+  padding-bottom: calc(24px * var(--liya-ui-scale, 1));
+  /* Absolute at bottom so avatar canvas extends behind controls —
+     arms appear continuously behind the chatbox */
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 3;
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__messages {
-  width: clamp(320px, 40vw, 720px);
+  width: clamp(calc(320px * var(--liya-ui-scale, 1)), 40vw, calc(720px * var(--liya-ui-scale, 1)));
   /* Use max-height only (no fixed height) so short content doesn't create empty space */
-  max-height: clamp(160px, 22vh, 320px);
+  max-height: clamp(calc(160px * var(--liya-ui-scale, 1)), 22vh, calc(320px * var(--liya-ui-scale, 1)));
   background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
     0 20px 50px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  border-radius: 20px;
-  padding: 14px 16px;
+  border-radius: calc(20px * var(--liya-ui-scale, 1));
+  padding: calc(14px * var(--liya-ui-scale, 1)) calc(16px * var(--liya-ui-scale, 1));
   display: flex;
   flex-direction: column;
   /* flex-start + JS scroll-to-bottom: ensures padding-bottom is respected when overflowing */
   justify-content: flex-start;
-  gap: 8px;
+  gap: calc(8px * var(--liya-ui-scale, 1));
   backdrop-filter: blur(20px);
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
   z-index: 1;
-  /* Ensure bottom padding is respected during scroll */
-  scroll-padding-bottom: 14px;
+  scroll-padding-bottom: calc(14px * var(--liya-ui-scale, 1));
 }
 
 /* Spacer that guarantees bottom breathing room even under overflow */
@@ -2604,10 +2630,10 @@ watch(isMessageBoxVisible, () => {
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__message {
-  font-size: 13px;
+  font-size: calc(13px * var(--liya-ui-scale, 1));
   line-height: 1.5;
-  padding: 10px 14px;
-  border-radius: 12px;
+  padding: calc(10px * var(--liya-ui-scale, 1)) calc(14px * var(--liya-ui-scale, 1));
+  border-radius: calc(12px * var(--liya-ui-scale, 1));
   max-width: 85%;
   word-wrap: break-word;
   white-space: normal;
@@ -2648,9 +2674,9 @@ watch(isMessageBoxVisible, () => {
 .liya-3d-avatar-widget-vuejs-kiosk__suggestion-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  font-size: 12px;
+  gap: calc(6px * var(--liya-ui-scale, 1));
+  padding: calc(8px * var(--liya-ui-scale, 1)) calc(14px * var(--liya-ui-scale, 1));
+  font-size: calc(12px * var(--liya-ui-scale, 1));
   font-family: inherit;
   font-weight: 500;
   color: #a5b4fc;
@@ -2688,8 +2714,8 @@ watch(isMessageBoxVisible, () => {
 }
 
 .liya-3d-avatar-widget-vuejs-kiosk__mic {
-  width: 72px;
-  height: 72px;
+  width: calc(72px * var(--liya-ui-scale, 1));
+  height: calc(72px * var(--liya-ui-scale, 1));
   border-radius: 50%;
   border: none;
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(139, 92, 246, 0.9));
@@ -2728,7 +2754,7 @@ watch(isMessageBoxVisible, () => {
 
 .liya-3d-avatar-widget-vuejs-kiosk__hint {
   color: rgba(255, 255, 255, 0.6);
-  font-size: 13px;
+  font-size: calc(13px * var(--liya-ui-scale, 1));
   margin: 0;
 }
 
@@ -2803,7 +2829,8 @@ watch(isMessageBoxVisible, () => {
   }
 }
 
-/* Large screen optimizations (27"+ / 1080p+ monitors) */
+/* Large screen layout adjustments (27"+ / 1080p+ monitors)
+   Per-element sizes are handled by --liya-ui-scale (set in JS) */
 @media (min-width: 1920px) {
   .liya-3d-avatar-widget-vuejs-kiosk__container {
     width: min(1280px, 92%);
@@ -2813,40 +2840,12 @@ watch(isMessageBoxVisible, () => {
     width: min(55vw, 1100px);
   }
 
-  .liya-3d-avatar-widget-vuejs-kiosk__messages {
-    width: clamp(480px, 50vw, 1000px);
-    max-height: clamp(160px, 20vh, 380px);
-    font-size: 15px;
-    border-radius: 24px;
-    padding: 18px 20px;
-    gap: 10px;
-  }
-
-  .liya-3d-avatar-widget-vuejs-kiosk__message {
-    font-size: 15px;
-    padding: 12px 16px;
-  }
-
-  .liya-3d-avatar-widget-vuejs-kiosk__mic {
-    width: 84px;
-    height: 84px;
-  }
-
-  .liya-3d-avatar-widget-vuejs-kiosk__hint {
-    font-size: 14px;
-  }
-
-  .liya-3d-avatar-widget-vuejs-kiosk__suggestion-btn {
-    font-size: 14px;
-    padding: 10px 18px;
-  }
-
   .liya-3d-avatar-widget-vuejs-kiosk__avatar {
-    max-height: clamp(500px, 72vh, 1100px);
+    max-height: clamp(500px, 72vh, 1500px);
   }
 }
 
-/* 4K / UHD screens (TV / large display) */
+/* 2K / QHD screens */
 @media (min-width: 2560px) {
   .liya-3d-avatar-widget-vuejs-kiosk__container {
     width: min(1600px, 88%);
@@ -2856,51 +2855,23 @@ watch(isMessageBoxVisible, () => {
     width: min(58vw, 1400px);
   }
 
-  .liya-3d-avatar-widget-vuejs-kiosk__messages {
-    width: clamp(560px, 48vw, 1200px);
-    max-height: clamp(180px, 20vh, 460px);
-    font-size: 18px;
-    border-radius: 28px;
-    padding: 22px 26px;
-    gap: 12px;
+  .liya-3d-avatar-widget-vuejs-kiosk__avatar {
+    max-height: clamp(560px, 72vh, 2000px);
+  }
+}
+
+/* 4K / UHD screens — 75" TV and similar large displays */
+@media (min-width: 3840px) {
+  .liya-3d-avatar-widget-vuejs-kiosk__container {
+    width: min(2000px, 88%);
   }
 
-  .liya-3d-avatar-widget-vuejs-kiosk__message {
-    font-size: 18px;
-    padding: 14px 20px;
-    border-radius: 16px;
-  }
-
-  .liya-3d-avatar-widget-vuejs-kiosk__mic {
-    width: 104px;
-    height: 104px;
-  }
-
-  .liya-3d-avatar-widget-vuejs-kiosk__hint {
-    font-size: 17px;
-  }
-
-  .liya-3d-avatar-widget-vuejs-kiosk__suggestion-btn {
-    font-size: 16px;
-    padding: 12px 22px;
-    border-radius: 24px;
-  }
-
-  .liya-3d-avatar-widget-vuejs-kiosk__status {
-    padding: 10px 18px;
-  }
-
-  .liya-3d-avatar-widget-vuejs-kiosk__status-text {
-    font-size: 15px;
+  .liya-3d-avatar-widget-vuejs-kiosk--modal .liya-3d-avatar-widget-vuejs-kiosk__container {
+    width: min(50vw, 1920px);
   }
 
   .liya-3d-avatar-widget-vuejs-kiosk__avatar {
-    max-height: clamp(560px, 70vh, 1200px);
-  }
-
-  .liya-3d-avatar-widget-vuejs-kiosk__controls {
-    gap: 24px;
-    padding-bottom: 40px;
+    max-height: clamp(640px, 72vh, 2200px);
   }
 }
 
@@ -3140,10 +3111,10 @@ watch(isMessageBoxVisible, () => {
 
 /* Message Box Toggle Button */
 .liya-3d-avatar-widget-vuejs-kiosk__toggle-msg-btn {
-  width: 36px;
-  height: 36px;
+  width: calc(36px * var(--liya-ui-scale, 1));
+  height: calc(36px * var(--liya-ui-scale, 1));
   border: none;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--liya-ui-scale, 1));
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
