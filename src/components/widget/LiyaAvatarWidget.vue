@@ -753,30 +753,33 @@ function updateKioskAvatarSize(): void {
       : Math.min(width, 960))
 
   const chatboxHidden = !isMessageBoxVisible.value
-  // Wider widthFactor when chatbox is visible: arms need to extend past the
-  // chatbox edges (chatbox is ~40vw wide, capped at ~720px scaled).
   const widthFactor = isSmallMobile
-    ? (isModalKiosk.value ? 0.95 : 0.98)
+    ? (isModalKiosk.value ? 0.9 : 0.95)
     : isMobile
-      ? (isModalKiosk.value ? 0.85 : 0.92)
+      ? (isModalKiosk.value ? 0.8 : 0.9)
       : chatboxHidden
-        ? 0.85
-        : (isModalKiosk.value ? 0.7 : 0.85)
+        ? 0.75
+        : (isModalKiosk.value ? 0.42 : 0.55)
 
-  // Controls are position:absolute — they don't consume layout height.
-  // Canvas fills the full container height so arms appear behind the chatbox overlay.
+  // Measure actual controls height from DOM; fall back to estimates scaled by uiScale
+  const controlsHeight = kioskControlsRef.value
+    ? kioskControlsRef.value.getBoundingClientRect().height
+    : isMessageBoxVisible.value
+      ? (isMobile ? 280 * s : 420 * s)
+      : (isMobile ? 140 * s : 170 * s)
+
+  // Container vertical padding (mirrors CSS padding on __container)
   const containerPadTop = Math.min(Math.max(height * 0.03, 24), 60)
   const containerPadBot = Math.min(Math.max(height * 0.03, 24), 48)
+  const avatarControlsGap = 16 * s
 
-  // Available height = full viewport minus container padding only
-  const availableAvatarH = height - containerPadTop - containerPadBot
+  // Available height for the avatar section = viewport − container pads − controls − gap
+  const availableAvatarH = height - containerPadTop - containerPadBot - controlsHeight - avatarControlsGap
 
   const minHeight = isMobile ? 280 : width >= 3840 ? 640 : width >= 2560 ? 480 : 360
-  // Canvas always fills the full available avatar height — no max cap.
-  // The avatar div takes the full container height (controls are absolute),
-  // so canvas should match it exactly to avoid empty space at the top
-  // (which pushes the avatar's head down out of view).
-  const canvasHeight = Math.max(availableAvatarH, minHeight)
+  // Height cap scales with resolution: 1100 → 1500@2K → 2000@4K
+  const maxCanvasHeight = width >= 3840 ? 2000 : width >= 2560 ? 1500 : 1100
+  const canvasHeight = Math.max(Math.min(availableAvatarH, height * 0.75, maxCanvasHeight), minHeight)
 
   // Cap canvas width to the effective container width
   const canvasWidth = Math.min(containerMaxW * widthFactor, containerMaxW)
@@ -2482,16 +2485,16 @@ function onMsgBoxTransitionDone(): void {
   position: relative;
   width: 100%;
   display: flex;
-  /* Anchor canvas to top so the avatar's head sits near the top of the
-     viewport and the chest/arms area aligns with the chatbox overlay below */
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: center;
   padding-top: 0;
   margin: 0 auto;
   flex: 1 1 auto;
   min-height: 200px;
+  /* Prevent the avatar section from growing excessively on tall viewports */
+  max-height: clamp(400px, 75vh, 1100px);
   z-index: 2;
-  overflow: visible;
+  overflow: hidden;
 }
 
 /* Floating Status Indicator */
@@ -2592,12 +2595,8 @@ function onMsgBoxTransitionDone(): void {
   align-items: center;
   gap: calc(18px * var(--liya-ui-scale, 1));
   padding-bottom: calc(24px * var(--liya-ui-scale, 1));
-  /* Absolute at bottom so avatar canvas extends behind controls —
-     arms appear continuously behind the chatbox */
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  flex-shrink: 0;
+  position: relative;
   z-index: 3;
 }
 

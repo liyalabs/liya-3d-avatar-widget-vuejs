@@ -181,18 +181,15 @@ function initScene() {
   // Don't set background color - let it be transparent
   // scene.background = new THREE.Color(props.backgroundColor)
 
-  // Camera — frames head + shoulders + arms (Y world 0.6 to 1.85).
-  // Wider FOV (38°) and lower lookAt include the arm meshes (Y=0.95) so
-  // they're visible at canvas sides; chatbox overlay covers the chest area
-  // while head stays above the chatbox.
+  // Camera - focused on chest and above
   camera = new THREE.PerspectiveCamera(
-    38,
+    30,
     props.width / props.height,
     0.1,
     1000
   )
-  camera.position.set(0, 1.35, 1.6)
-  camera.lookAt(0, 1.25, 0)
+  camera.position.set(0, 1.48, 1.5)
+  camera.lookAt(0, 1.4, 0)
 
   // Renderer - Safari/iOS optimized settings
   renderer = new THREE.WebGLRenderer({ 
