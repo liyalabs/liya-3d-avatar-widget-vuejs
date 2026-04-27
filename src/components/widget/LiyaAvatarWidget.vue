@@ -770,9 +770,11 @@ function updateKioskAvatarSize(): void {
   const availableAvatarH = height - containerPadTop - containerPadBot
 
   const minHeight = isMobile ? 280 : width >= 3840 ? 640 : width >= 2560 ? 480 : 360
-  // Height cap scales with resolution: 1100 → 1500@2K → 2000@4K
-  const maxCanvasHeight = width >= 3840 ? 2000 : width >= 2560 ? 1500 : 1100
-  const canvasHeight = Math.max(Math.min(availableAvatarH, height * 0.75, maxCanvasHeight), minHeight)
+  // Height cap scales with resolution. No vh cap — canvas fills the full
+  // kiosk__avatar section so the avatar isn't pushed down by empty space
+  // above the canvas (controls are absolutely positioned).
+  const maxCanvasHeight = width >= 3840 ? 2400 : width >= 2560 ? 1800 : 1400
+  const canvasHeight = Math.max(Math.min(availableAvatarH, maxCanvasHeight), minHeight)
 
   // Cap canvas width to the effective container width
   const canvasWidth = Math.min(containerMaxW * widthFactor, containerMaxW)
@@ -2478,14 +2480,14 @@ function onMsgBoxTransitionDone(): void {
   position: relative;
   width: 100%;
   display: flex;
-  align-items: flex-end;
+  /* Anchor canvas to top so the avatar's head sits near the top of the
+     viewport and the chest/arms area aligns with the chatbox overlay below */
+  align-items: flex-start;
   justify-content: center;
   padding-top: 0;
   margin: 0 auto;
   flex: 1 1 auto;
   min-height: 200px;
-  /* No max-height cap — let canvas fill full container height so arms
-     are visible behind the controls overlay */
   z-index: 2;
   overflow: visible;
 }
