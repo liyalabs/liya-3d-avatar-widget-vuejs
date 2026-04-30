@@ -15,7 +15,7 @@
  */
 // Liya AI Widget - Internationalization Translations
 
-export type SupportedLocale = 'tr' | 'en'
+export type SupportedLocale = 'tr' | 'en' | 'zh'
 
 export interface Translations {
   // Widget general
@@ -307,10 +307,107 @@ export const translations: Record<SupportedLocale, Translations> = {
       reset: 'Reset',
     },
   },
+  zh: {
+    widget: {
+      openChat: '打开聊天',
+      closeChat: '关闭聊天',
+      online: '在线',
+      preparing: '准备中...',
+      speaking: '正在说话...',
+    },
+    browser: {
+      unsupportedTitle: '浏览器不受支持',
+      unsupportedMessage: '此小部件无法在您的浏览器中运行。3D 头像需要 WebGL 支持。',
+      webglRequired: '需要 WebGL 支持',
+      recommendedBrowsers: '推荐：Chrome、Edge、Firefox、Safari',
+      closeButton: '关闭',
+    },
+    mic: {
+      permissionRequired: '需要麦克风权限',
+      permissionMessage: '请允许访问麦克风以进行语音通信。',
+      allowButton: '允许',
+      denied: '麦克风权限被拒绝',
+    },
+    chat: {
+      placeholder: '请输入您的消息...',
+      send: '发送',
+      typing: '正在输入...',
+      welcomeMessage: '此聊天服务由 Liya AI 提供。今天我能为您做什么？',
+      welcomeSuggestions: [
+        'Liya AI 3D 头像小部件是什么？',
+        '介绍一下 Liya AI',
+        '介绍 Liyalabs 公司'
+      ],
+    },
+    voice: {
+      startRecording: '开始说话',
+      stopRecording: '停止录音',
+      listening: '正在聆听...',
+      thinking: '正在思考...',
+      speakToMic: '按麦克风开始说话',
+      voiceNotSupported: '不支持语音识别',
+      notSupported: '此浏览器不支持语音识别',
+    },
+    file: {
+      upload: '上传文件',
+      uploading: '上传中...',
+      uploadError: '上传文件时出错',
+      maxSize: '最大文件大小：{size}MB',
+      invalidType: '无效的文件类型',
+    },
+    kiosk: {
+      close: '关闭',
+      cancel: '取消',
+      refresh: '刷新',
+      ready: '就绪',
+      listening: '正在聆听...',
+      preparing: '准备中...',
+      speaking: '正在说话...',
+      hideMessages: '隐藏消息',
+      showMessages: '显示消息',
+    },
+    preparingMessages: [
+      '准备中...',
+      '思考中... 🤔',
+      '请稍候...',
+      '正在准备答案... ✍️',
+      '快完成了... ⏳',
+      '再等一下... 😊',
+      '详细答案即将到来...',
+      '仍在思考... 🧠',
+      '这是个好问题，需要一点时间...',
+      '最后润色... ✨',
+    ],
+    avatar: {
+      replay: '重播',
+      stop: '停止',
+    },
+    branding: {
+      poweredBy: '技术支持',
+    },
+    errors: {
+      connectionError: '发生连接错误',
+      sendError: '消息发送失败',
+      sessionError: '会话错误',
+      featureNotAvailable: '此功能在您当前的套餐中不可用',
+      upgradeToPremium: '请升级到 Premium 或 Premium Plus 套餐以使用 3D 头像小部件。',
+      upgradeToPremiumPlus: '请升级到 Premium Plus 套餐以上传自定义 3D 头像。',
+    },
+    settings: {
+      title: '设置',
+      outfitColors: '服装颜色',
+      top: '上装',
+      bottom: '下装',
+      footwear: '鞋子',
+      presets: '预设',
+      customColor: '自定义颜色',
+      reset: '重置',
+    },
+  },
 }
 
 export function isSupportedLocale(locale: string): locale is SupportedLocale {
-  return locale === 'tr' || locale === 'en'
+  return locale === 'tr' || locale === 'en' || locale === 'zh'
 }
 
 export function detectBrowserLocale(): SupportedLocale {
@@ -326,4 +423,16 @@ export function detectBrowserLocale(): SupportedLocale {
   }
   
   return 'tr'
+}
+
+/** Map i18n locale code → BCP-47 language tag used by TTS / SpeechRecognition */
+export const LOCALE_TO_BCP47: Record<SupportedLocale, string> = {
+  tr: 'tr-TR',
+  en: 'en-US',
+  zh: 'zh-CN',
+}
+
+/** Convert an arbitrary locale string to its BCP-47 equivalent (falls back to the input value). */
+export function localeToBCP47(locale: string): string {
+  return LOCALE_TO_BCP47[locale as SupportedLocale] ?? locale
 }

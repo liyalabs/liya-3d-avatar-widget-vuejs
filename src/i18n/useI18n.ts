@@ -28,6 +28,11 @@ export function useI18n() {
       currentLocale.value = newLocale
     } else {
       // Fallback to Turkish for unsupported locales
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(
+          `[LiyaWidget] Unsupported locale: "${newLocale}". Falling back to "tr". Supported: tr, en, zh`
+        )
+      }
       currentLocale.value = 'tr'
     }
   }
@@ -37,6 +42,11 @@ export function useI18n() {
       currentLocale.value = configLocale
     } else if (configLocale) {
       // Unsupported locale, fallback to Turkish
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(
+          `[LiyaWidget] Unsupported locale from config: "${configLocale}". Falling back to "tr". Supported: tr, en, zh`
+        )
+      }
       currentLocale.value = 'tr'
     } else {
       // No config locale, detect from browser

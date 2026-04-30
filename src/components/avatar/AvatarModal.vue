@@ -1,351 +1,370 @@
-/**
- * ==================================================
- * ██╗     ██╗██╗   ██╗ █████╗ 
- * ██║     ██║╚██╗ ██╔╝██╔══██╗
- * ██║     ██║ ╚████╔╝ ███████║
- * ██║     ██║  ╚██╔╝  ██╔══██║
- * ███████╗██║   ██║   ██║  ██║
- * ╚══════╝╚═╝   ╚═╝   ╚═╝  ╚═╝
- *        AI Assistant
- * ==================================================
- * Author / Creator : Mahmut Denizli (With help of LiyaAi)
- * License          : MIT
- * Connect          : liyalabs.com, info@liyalabs.com
- * ==================================================
- */
+/** * ================================================== * ██╗ ██╗██╗ ██╗ █████╗
+* ██║ ██║╚██╗ ██╔╝██╔══██╗ * ██║ ██║ ╚████╔╝ ███████║ * ██║ ██║ ╚██╔╝ ██╔══██║ *
+███████╗██║ ██║ ██║ ██║ * ╚══════╝╚═╝ ╚═╝ ╚═╝ ╚═╝ * AI Assistant *
+================================================== * Author / Creator : Mahmut
+Denizli (With help of LiyaAi) * License : MIT * Connect : liyalabs.com,
+info@liyalabs.com * ================================================== */
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import AvatarScene from './AvatarScene.vue'
-import { useChat } from '../../composables/useChat'
-import { useVoice } from '../../composables/useVoice'
-import { getConfig } from '../../api'
-import { useI18n } from '../../i18n'
-import { stripForTTS } from '../../utils/tts'
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import AvatarScene from "./AvatarScene.vue";
+import { useChat } from "../../composables/useChat";
+import { useVoice } from "../../composables/useVoice";
+import { getConfig } from "../../api";
+import { useI18n } from "../../i18n";
+import { stripForTTS } from "../../utils/tts";
 
 interface Props {
-  isOpen: boolean
-  modelUrl?: string
-  assistantName?: string
-  welcomeMessage?: string
+  isOpen: boolean;
+  modelUrl?: string;
+  assistantName?: string;
+  welcomeMessage?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   isOpen: false,
-  modelUrl: '',
-  assistantName: 'AI Assistant',
-  welcomeMessage: 'Merhaba! Size nasıl yardımcı olabilirim?'
-})
+  modelUrl: "",
+  assistantName: "AI Assistant",
+  welcomeMessage: "Merhaba! Size nasıl yardımcı olabilirim?",
+});
 
 const emit = defineEmits<{
-  close: []
-  messageSent: [message: string]
-  messageReceived: [message: string]
-}>()
+  close: [];
+  messageSent: [message: string];
+  messageReceived: [message: string];
+}>();
 
-const config = getConfig()
-const { t } = useI18n()
+const config = getConfig();
+const { t, locale } = useI18n();
 
-const {
-  messages,
-  sendMessage
-} = useChat()
+const { messages, sendMessage } = useChat();
 
 const {
   isRecording: isListening,
   isSupported: isVoiceSupported,
   transcript,
   startRecording: startListening,
-  stopRecording: stopListening
-} = useVoice()
+  stopRecording: stopListening,
+} = useVoice(locale);
 
 // Avatar state
-const isSpeaking = ref(false)
-const currentVisemes = ref<Array<{ time: number; viseme: number; duration: number }>>([])
-const audioCurrentTime = ref(0)
-const currentMessage = ref('')
-const isProcessing = ref(false)
+const isSpeaking = ref(false);
+const currentVisemes = ref<
+  Array<{ time: number; viseme: number; duration: number }>
+>([]);
+const audioCurrentTime = ref(0);
+const currentMessage = ref("");
+const isProcessing = ref(false);
 
 // Rotating preparing messages
-const preparingMessageIndex = ref(0)
-const preparingStartTime = ref(0)
-let preparingTimer: ReturnType<typeof setInterval> | null = null
+const preparingMessageIndex = ref(0);
+const preparingStartTime = ref(0);
+let preparingTimer: ReturnType<typeof setInterval> | null = null;
 
 watch(isProcessing, (processing) => {
   if (processing) {
-    preparingMessageIndex.value = 0
-    preparingStartTime.value = Date.now()
+    preparingMessageIndex.value = 0;
+    preparingStartTime.value = Date.now();
     preparingTimer = setInterval(() => {
-      const elapsed = Date.now() - preparingStartTime.value
+      const elapsed = Date.now() - preparingStartTime.value;
       if (elapsed > 8000) {
-        preparingMessageIndex.value = 
-          (preparingMessageIndex.value + 1) % t.value.preparingMessages.length
+        preparingMessageIndex.value =
+          (preparingMessageIndex.value + 1) % t.value.preparingMessages.length;
       }
-    }, 4000)
+    }, 4000);
   } else {
     if (preparingTimer) {
-      clearInterval(preparingTimer)
-      preparingTimer = null
+      clearInterval(preparingTimer);
+      preparingTimer = null;
     }
-    preparingMessageIndex.value = 0
+    preparingMessageIndex.value = 0;
   }
-})
+});
 
 const hintText = computed(() => {
-  if (isListening.value) return t.value.voice.listening
-  if (isProcessing.value) return t.value.preparingMessages[preparingMessageIndex.value]
-  return t.value.voice.speakToMic
-})
+  if (isListening.value) return t.value.voice.listening;
+  if (isProcessing.value)
+    return t.value.preparingMessages[preparingMessageIndex.value];
+  return t.value.voice.speakToMic;
+});
 
 // Audio player
-let audioContext: AudioContext | null = null
-let audioSource: AudioBufferSourceNode | null = null
-let startTime = 0
+let audioContext: AudioContext | null = null;
+let audioSource: AudioBufferSourceNode | null = null;
+let startTime = 0;
 
 // iOS AudioContext helper - must be called after user interaction
 async function ensureAudioContext(): Promise<AudioContext> {
   if (!audioContext) {
     // Use webkitAudioContext for older iOS versions
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
-    audioContext = new AudioContextClass()
+    const AudioContextClass =
+      window.AudioContext || (window as any).webkitAudioContext;
+    audioContext = new AudioContextClass();
   }
-  
+
   // iOS requires resume() after user interaction
-  if (audioContext.state === 'suspended') {
-    await audioContext.resume()
+  if (audioContext.state === "suspended") {
+    await audioContext.resume();
   }
-  
-  return audioContext
+
+  return audioContext;
 }
 
-const assistantDisplayName = computed(() => props.assistantName || config.assistantName || 'AI Assistant')
+const assistantDisplayName = computed(
+  () => props.assistantName || config.assistantName || "AI Assistant",
+);
 
 // Watch for transcript changes (voice input)
 watch(transcript, (newTranscript) => {
   if (newTranscript && !isListening.value) {
-    handleSendMessage(newTranscript)
+    handleSendMessage(newTranscript);
   }
-})
+});
 
 async function handleSendMessage(message: string) {
-  if (!message.trim() || isProcessing.value) return
+  if (!message.trim() || isProcessing.value) return;
 
-  isProcessing.value = true
-  currentMessage.value = message
-  emit('messageSent', message)
+  isProcessing.value = true;
+  currentMessage.value = message;
+  emit("messageSent", message);
 
   try {
-    const response = await sendMessage(message)
-    
+    const response = await sendMessage(message);
+
     if (response?.assistant_message?.content || response?.response) {
-      const responseText = response.assistant_message?.content || response.response || ''
-      emit('messageReceived', responseText)
-      
+      const responseText =
+        response.assistant_message?.content || response.response || "";
+      emit("messageReceived", responseText);
+
       // Extract text from JSON response if needed, then strip for TTS
-      let textToSpeak = responseText
+      let textToSpeak = responseText;
       try {
-        const parsed = JSON.parse(responseText)
+        const parsed = JSON.parse(responseText);
         if (parsed.response) {
-          textToSpeak = parsed.response
+          textToSpeak = parsed.response;
         }
       } catch {
         // Not JSON, use as-is
       }
-      await speakWithAvatar(stripForTTS(textToSpeak))
+      await speakWithAvatar(stripForTTS(textToSpeak));
     }
-  } catch (error) { /* message send failed */ } finally {
-    isProcessing.value = false
-    currentMessage.value = ''
+  } catch (error) {
+    /* message send failed */
+  } finally {
+    isProcessing.value = false;
+    currentMessage.value = "";
   }
 }
 
 async function speakWithAvatar(text: string) {
   try {
     // Call avatar speech API
-    const apiUrl = config.apiUrl || ''
-    const apiKey = config.apiKey || ''
-    
+    const apiUrl = config.apiUrl || "";
+    const apiKey = config.apiKey || "";
+
     const response = await fetch(`${apiUrl}/api/v1/external/avatar/speech/`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': apiKey
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey,
       },
       body: JSON.stringify({
         text,
-        voice: 'nova',
+        voice: "nova",
         speed: 1.0,
-        include_audio: true
-      })
-    })
+        include_audio: true,
+      }),
+    });
 
     if (!response.ok) {
-      throw new Error('Failed to generate avatar speech')
+      throw new Error("Failed to generate avatar speech");
     }
 
-    const data = await response.json()
-    
-    if (data.status === 'success' && data.data) {
-      currentVisemes.value = data.data.visemes || []
-      
+    const data = await response.json();
+
+    if (data.status === "success" && data.data) {
+      currentVisemes.value = data.data.visemes || [];
+
       // Play audio with viseme sync
       if (data.data.audio_base64) {
-        await playAudioWithSync(data.data.audio_base64)
+        await playAudioWithSync(data.data.audio_base64);
       }
     }
   } catch (error) {
     // Fallback: just show speaking animation without audio
-    simulateSpeaking(text)
+    simulateSpeaking(text);
   }
 }
 
 async function playAudioWithSync(base64Audio: string) {
   try {
     // Decode base64 audio
-    const binaryString = atob(base64Audio)
+    const binaryString = atob(base64Audio);
     // Create ArrayBuffer directly - iOS compatible
-    const len = binaryString.length
-    const arrayBuffer = new ArrayBuffer(len)
-    const uint8Array = new Uint8Array(arrayBuffer)
+    const len = binaryString.length;
+    const arrayBuffer = new ArrayBuffer(len);
+    const uint8Array = new Uint8Array(arrayBuffer);
     for (let i = 0; i < len; i++) {
-      uint8Array[i] = binaryString.charCodeAt(i)
+      uint8Array[i] = binaryString.charCodeAt(i);
     }
 
     // Ensure AudioContext is ready (iOS fix)
-    const ctx = await ensureAudioContext()
+    const ctx = await ensureAudioContext();
 
     // Decode audio data - iOS Safari requires callback-based API
     const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
       ctx.decodeAudioData(
         arrayBuffer,
         (buffer) => resolve(buffer),
-        (error) => reject(error || new Error('Audio decode failed'))
-      )
-    })
+        (error) => reject(error || new Error("Audio decode failed")),
+      );
+    });
 
     // Stop any existing audio
     if (audioSource) {
-      audioSource.stop()
-      audioSource.disconnect()
+      audioSource.stop();
+      audioSource.disconnect();
     }
 
     // Create and play audio source
-    audioSource = ctx.createBufferSource()
-    audioSource.buffer = audioBuffer
-    audioSource.connect(ctx.destination)
+    audioSource = ctx.createBufferSource();
+    audioSource.buffer = audioBuffer;
+    audioSource.connect(ctx.destination);
 
-    isSpeaking.value = true
-    startTime = ctx.currentTime
+    isSpeaking.value = true;
+    startTime = ctx.currentTime;
 
     // Update current time for viseme sync
     const updateTime = () => {
       if (isSpeaking.value && ctx) {
-        audioCurrentTime.value = ctx.currentTime - startTime
-        requestAnimationFrame(updateTime)
+        audioCurrentTime.value = ctx.currentTime - startTime;
+        requestAnimationFrame(updateTime);
       }
-    }
-    updateTime()
+    };
+    updateTime();
 
     audioSource.onended = () => {
-      isSpeaking.value = false
-      audioCurrentTime.value = 0
-      currentVisemes.value = []
-    }
+      isSpeaking.value = false;
+      audioCurrentTime.value = 0;
+      currentVisemes.value = [];
+    };
 
-    audioSource.start()
+    audioSource.start();
   } catch (error) {
-    isSpeaking.value = false
+    isSpeaking.value = false;
   }
 }
 
 function simulateSpeaking(text: string) {
   // Generate simple visemes for fallback
-  const duration = text.length * 0.05
-  const visemes: Array<{ time: number; viseme: number; duration: number }> = []
-  
-  let time = 0
+  const duration = text.length * 0.05;
+  const visemes: Array<{ time: number; viseme: number; duration: number }> = [];
+
+  let time = 0;
   for (let i = 0; i < text.length; i++) {
-    const char = text[i].toLowerCase()
-    let viseme = 0
-    
-    if ('aeiouäöü'.includes(char)) viseme = 10 + Math.floor(Math.random() * 5)
-    else if ('bcdfghjklmnpqrstvwxyz'.includes(char)) viseme = 1 + Math.floor(Math.random() * 9)
-    
-    visemes.push({ time, viseme, duration: 0.05 })
-    time += 0.05
+    const char = text[i].toLowerCase();
+    let viseme = 0;
+
+    if ("aeiouäöü".includes(char)) viseme = 10 + Math.floor(Math.random() * 5);
+    else if ("bcdfghjklmnpqrstvwxyz".includes(char))
+      viseme = 1 + Math.floor(Math.random() * 9);
+
+    visemes.push({ time, viseme, duration: 0.05 });
+    time += 0.05;
   }
 
-  currentVisemes.value = visemes
-  isSpeaking.value = true
-  audioCurrentTime.value = 0
+  currentVisemes.value = visemes;
+  isSpeaking.value = true;
+  audioCurrentTime.value = 0;
 
   // Animate through visemes
-  const startMs = Date.now()
+  const startMs = Date.now();
   const animate = () => {
-    const elapsed = (Date.now() - startMs) / 1000
-    audioCurrentTime.value = elapsed
-    
+    const elapsed = (Date.now() - startMs) / 1000;
+    audioCurrentTime.value = elapsed;
+
     if (elapsed < duration) {
-      requestAnimationFrame(animate)
+      requestAnimationFrame(animate);
     } else {
-      isSpeaking.value = false
-      currentVisemes.value = []
+      isSpeaking.value = false;
+      currentVisemes.value = [];
     }
-  }
-  animate()
+  };
+  animate();
 }
 
 function toggleListening() {
   if (isListening.value) {
-    stopListening()
+    stopListening();
   } else {
-    startListening()
+    startListening();
   }
 }
 
 function handleClose() {
   // Stop any playing audio
   if (audioSource) {
-    audioSource.stop()
-    audioSource.disconnect()
-    audioSource = null
+    audioSource.stop();
+    audioSource.disconnect();
+    audioSource = null;
   }
-  isSpeaking.value = false
-  emit('close')
+  isSpeaking.value = false;
+  emit("close");
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
-    handleClose()
+  if (e.key === "Escape") {
+    handleClose();
   }
 }
 
 onMounted(() => {
-  document.addEventListener('keydown', handleKeydown)
-})
+  document.addEventListener("keydown", handleKeydown);
+});
 
 onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener("keydown", handleKeydown);
   if (audioContext) {
-    audioContext.close()
-    audioContext = null
+    audioContext.close();
+    audioContext = null;
   }
-})
+});
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="liya-3d-avatar-widget-vuejs-avatar-modal">
-      <div v-if="isOpen" class="liya-3d-avatar-widget-vuejs-avatar-modal-overlay" @click.self="handleClose">
+      <div
+        v-if="isOpen"
+        class="liya-3d-avatar-widget-vuejs-avatar-modal-overlay"
+        @click.self="handleClose"
+      >
         <div class="liya-3d-avatar-widget-vuejs-avatar-modal">
           <!-- Header -->
           <div class="liya-3d-avatar-widget-vuejs-avatar-modal__header">
             <div class="liya-3d-avatar-widget-vuejs-avatar-modal__title">
-              <div class="liya-3d-avatar-widget-vuejs-avatar-modal__status" :class="{ 'liya-3d-avatar-widget-vuejs-avatar-modal__status--speaking': isSpeaking }"></div>
+              <div
+                class="liya-3d-avatar-widget-vuejs-avatar-modal__status"
+                :class="{
+                  'liya-3d-avatar-widget-vuejs-avatar-modal__status--speaking':
+                    isSpeaking,
+                }"
+              ></div>
               <span>{{ assistantDisplayName }}</span>
             </div>
-            <button class="liya-3d-avatar-widget-vuejs-avatar-modal__close" @click="handleClose" :aria-label="t.kiosk.close">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            <button
+              class="liya-3d-avatar-widget-vuejs-avatar-modal__close"
+              @click="handleClose"
+              :aria-label="t.kiosk.close"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                width="24"
+                height="24"
+              >
+                <path
+                  d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+                />
               </svg>
             </button>
           </div>
@@ -364,13 +383,25 @@ onUnmounted(() => {
 
           <!-- Message Display -->
           <div class="liya-3d-avatar-widget-vuejs-avatar-modal__message">
-            <div v-if="isProcessing" class="liya-3d-avatar-widget-vuejs-avatar-modal__thinking">
-              <span class="liya-3d-avatar-widget-vuejs-avatar-modal__thinking-dot"></span>
-              <span class="liya-3d-avatar-widget-vuejs-avatar-modal__thinking-dot"></span>
-              <span class="liya-3d-avatar-widget-vuejs-avatar-modal__thinking-dot"></span>
+            <div
+              v-if="isProcessing"
+              class="liya-3d-avatar-widget-vuejs-avatar-modal__thinking"
+            >
+              <span
+                class="liya-3d-avatar-widget-vuejs-avatar-modal__thinking-dot"
+              ></span>
+              <span
+                class="liya-3d-avatar-widget-vuejs-avatar-modal__thinking-dot"
+              ></span>
+              <span
+                class="liya-3d-avatar-widget-vuejs-avatar-modal__thinking-dot"
+              ></span>
             </div>
             <p v-else-if="currentMessage">{{ currentMessage }}</p>
-            <p v-else-if="messages.length === 0" class="liya-3d-avatar-widget-vuejs-avatar-modal__welcome">
+            <p
+              v-else-if="messages.length === 0"
+              class="liya-3d-avatar-widget-vuejs-avatar-modal__welcome"
+            >
               {{ welcomeMessage }}
             </p>
             <p v-else-if="messages.length > 0">
@@ -383,20 +414,42 @@ onUnmounted(() => {
             <button
               v-if="isVoiceSupported"
               class="liya-3d-avatar-widget-vuejs-avatar-modal__mic"
-              :class="{ 
-                'liya-3d-avatar-widget-vuejs-avatar-modal__mic--active': isListening,
-                'liya-3d-avatar-widget-vuejs-avatar-modal__mic--disabled': isProcessing || isSpeaking
+              :class="{
+                'liya-3d-avatar-widget-vuejs-avatar-modal__mic--active':
+                  isListening,
+                'liya-3d-avatar-widget-vuejs-avatar-modal__mic--disabled':
+                  isProcessing || isSpeaking,
               }"
               :disabled="isProcessing || isSpeaking"
               @click="toggleListening"
-              :aria-label="isListening ? t.voice.stopRecording : t.voice.startRecording"
+              :aria-label="
+                isListening ? t.voice.stopRecording : t.voice.startRecording
+              "
             >
-              <svg v-if="!isListening" viewBox="0 0 24 24" fill="currentColor" width="32" height="32">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+              <svg
+                v-if="!isListening"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                width="32"
+                height="32"
+              >
+                <path
+                  d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"
+                />
               </svg>
-              <svg v-else viewBox="0 0 24 24" fill="currentColor" width="32" height="32">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+              <svg
+                v-else
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                width="32"
+                height="32"
+              >
+                <path
+                  d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"
+                />
+                <path
+                  d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"
+                />
               </svg>
             </button>
             <p class="liya-3d-avatar-widget-vuejs-avatar-modal__hint">
@@ -464,8 +517,15 @@ onUnmounted(() => {
 }
 
 @keyframes liya-3d-avatar-widget-vuejs-pulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.2); opacity: 0.7; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
 }
 
 .liya-3d-avatar-widget-vuejs-avatar-modal__close {
@@ -521,12 +581,22 @@ onUnmounted(() => {
   animation: liya-3d-avatar-widget-vuejs-bounce 1.4s infinite ease-in-out both;
 }
 
-.liya-3d-avatar-widget-vuejs-avatar-modal__thinking-dot:nth-child(1) { animation-delay: -0.32s; }
-.liya-3d-avatar-widget-vuejs-avatar-modal__thinking-dot:nth-child(2) { animation-delay: -0.16s; }
+.liya-3d-avatar-widget-vuejs-avatar-modal__thinking-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+.liya-3d-avatar-widget-vuejs-avatar-modal__thinking-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
 
 @keyframes liya-3d-avatar-widget-vuejs-bounce {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
 }
 
 .liya-3d-avatar-widget-vuejs-avatar-modal__controls {
@@ -565,8 +635,13 @@ onUnmounted(() => {
 }
 
 @keyframes liya-3d-avatar-widget-vuejs-mic-pulse {
-  0%, 100% { box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
-  50% { box-shadow: 0 4px 30px rgba(239, 68, 68, 0.6); }
+  0%,
+  100% {
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 4px 30px rgba(239, 68, 68, 0.6);
+  }
 }
 
 .liya-3d-avatar-widget-vuejs-avatar-modal__mic--disabled {
@@ -591,8 +666,10 @@ onUnmounted(() => {
   opacity: 0;
 }
 
-.liya-3d-avatar-widget-vuejs-avatar-modal-enter-from .liya-3d-avatar-widget-vuejs-avatar-modal,
-.liya-3d-avatar-widget-vuejs-avatar-modal-leave-to .liya-3d-avatar-widget-vuejs-avatar-modal {
+.liya-3d-avatar-widget-vuejs-avatar-modal-enter-from
+  .liya-3d-avatar-widget-vuejs-avatar-modal,
+.liya-3d-avatar-widget-vuejs-avatar-modal-leave-to
+  .liya-3d-avatar-widget-vuejs-avatar-modal {
   transform: scale(0.9) translateY(20px);
 }
 </style>
